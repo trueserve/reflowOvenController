@@ -49,8 +49,6 @@ typedef struct Thermocouple {
   uint8_t chipSelect;
 };
 
-#define LCD_CS 10
-
 void readThermocouple(struct Thermocouple* input) {
   MAX31855_t sensor;
 

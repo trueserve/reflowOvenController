@@ -1,0 +1,2 @@
+- doubleclick to exit load profile screen doesn't work
+- cycle display is not correct yet for vertical mode

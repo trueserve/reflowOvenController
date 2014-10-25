@@ -1,6 +1,7 @@
 // ----------------------------------------------------------------------------
 // Reflow Oven Controller
 // (c) 2014 Karl Pitrich <karl@pitrich.com>
+// (c) 2014 true <trueamx@gmail.com>
 // (c) 2012-2013 Ed Simmons
 // ----------------------------------------------------------------------------
 
@@ -14,7 +15,21 @@
 #define BOARD_TYPE          1   // 0 = kp's design, 1 = true's design
 #define LINE_FREQ           60  // 50 or 60 supported
 
-#define INITR_TABTYPE       INITR_REDTAB  // lcd type, usually INITR_RED/GREEN/BLACKTAB
+#define INITR_TABTYPE       INITR_BLACKTAB  // lcd type, usually INITR_RED/GREEN/BLACKTAB
+
+#define ENC_STEPS_PER_NOTCH 4   // steps per notch of the rotary encoder. to cal: set to 1, turn knob slowly, count
+
+#define TFT_ROTATE          1   // 0 or 2 = vertical, 1 or 3 = horizontal
+
+#if (TFT_ROTATE == 1 || TFT_ROTATE == 3)
+  #define TFT_LEFTCOL       10
+  #define TFT_WIDTH         160
+  #define TFT_HEIGHT        128
+#else
+  #define TFT_LEFTCOL       4
+  #define TFT_WIDTH         128
+  #define TFT_HEIGHT        160
+#endif
 
 //#define FAKE_HW             1
 //#define PIDTUNE             1   // autotune wouldn't fit in the 28k available on my arduino pro micro.
@@ -153,7 +168,7 @@ Adafruit_ST7735 tft = Adafruit_ST7735(LCD_CS, LCD_DC, LCD_RST);
 #ifdef FAKE_HW
  ClickEncoder Encoder(A0, A1, A2, 2);
 #else
- ClickEncoder Encoder(A1, A0, A2, 2);
+ ClickEncoder Encoder(A1, A0, A2, ENC_STEPS_PER_NOTCH);
 #endif
 
 Menu::Engine Engine;
@@ -336,7 +351,7 @@ bool editNumericalValue(const Menu::Action_t action) {
 
     if (initial) {
       tft.setTextColor(ST7735_BLACK, ST7735_WHITE);
-      tft.setCursor(10, 80);
+      tft.setCursor(TFT_LEFTCOL, 80);
       tft.print("Edit & click to save.");
       Encoder.setAccelerationEnabled(true);
     }
@@ -346,10 +361,10 @@ bool editNumericalValue(const Menu::Action_t action) {
         uint8_t y = currentlyRenderedItems[i].pos * menuItemHeight + 2;
 
         if (initial) {
-          tft.fillRect(69, y - 1, 60, menuItemHeight - 2, ST7735_RED);
+          tft.fillRect(TFT_LEFTCOL + 59, y - 1, (TFT_WIDTH - (TFT_LEFTCOL + 59) - TFT_LEFTCOL) + 1, menuItemHeight - 2, ST7735_RED);
         }
 
-        tft.setCursor(70, y);
+        tft.setCursor(TFT_LEFTCOL + 60, y);
         break;
       }
     }
@@ -419,9 +434,9 @@ bool factoryReset(const Menu::Action_t action) {
 
     if (initial) { // TODO: add eyecandy: colors or icons
       tft.setTextColor(ST7735_BLACK, ST7735_WHITE);
-      tft.setCursor(10, 80);
+      tft.setCursor(TFT_LEFTCOL, 80);
       tft.print("Click to confirm");
-      tft.setCursor(10, 90);
+      tft.setCursor(TFT_LEFTCOL, 90);
       tft.print("Doubleclick to exit");
     }
   }
@@ -460,14 +475,14 @@ bool saveLoadProfile(const Menu::Action_t action) {
 
     if (initial) {
       encAbsolute = activeProfileId;      
-      tft.setCursor(10, 90);
+      tft.setCursor(TFT_LEFTCOL, 90);
       tft.print("Doubleclick to exit");
     }
 
     if (encAbsolute > maxProfiles) encAbsolute = maxProfiles;
     if (encAbsolute <  0) encAbsolute =  0;
 
-    tft.setCursor(10, 80);
+    tft.setCursor(TFT_LEFTCOL, 80);
     tft.print("Click to ");
     tft.print((isLoad) ? "load " : "save ");
     tft.setTextColor(ST7735_WHITE, ST7735_RED);
@@ -526,13 +541,12 @@ void renderMenuItem(const Menu::Item_t *mi, uint8_t pos) {
     return; // don't render the same item in the same state twice
   }
 
-  tft.setCursor(10, y);
-
   // menu cursor bar
-  tft.fillRect(8, y - 2, tft.width() - 16, menuItemHeight, isCurrent ? ST7735_BLUE : ST7735_WHITE);
+  tft.fillRect(TFT_LEFTCOL - 2, y - 2, TFT_WIDTH - (TFT_LEFTCOL << 1) + 4, menuItemHeight, isCurrent ? ST7735_BLUE : ST7735_WHITE);
   if (isCurrent) tft.setTextColor(ST7735_WHITE, ST7735_BLUE);
   else tft.setTextColor(ST7735_BLACK, ST7735_WHITE);
 
+  tft.setCursor(TFT_LEFTCOL, y);
   tft.print(Engine.getLabel(mi));
 
   // show values if in-place editable items
@@ -611,7 +625,7 @@ void killRelayPins(void) {
 
 
 // --WAVE PACKET---------------------------------------------------------------
-// only turn the solid state relais on for a percentage 
+// only turn the solid state relays on for a percentage 
 // of complete sinusoids (i.e. 1x 360°)
 
 #define CHANNELS       2
@@ -728,11 +742,11 @@ void abortWithError(int error) {
   tft.setTextColor(ST7735_WHITE, ST7735_RED);
   tft.fillScreen(ST7735_RED);
 
-  tft.setCursor(10, 10);
+  tft.setCursor(TFT_LEFTCOL, 10);
   
   if (error < 9) {
     tft.println("Thermocouple Error");
-    tft.setCursor(10, 30);
+    tft.setCursor(TFT_LEFTCOL, 30);
     switch (error) {
       case 0b001:
         tft.println("Open Circuit");
@@ -744,16 +758,16 @@ void abortWithError(int error) {
         tft.println("VCC Short");
         break;
     }
-    tft.setCursor(10, 60);
+    tft.setCursor(TFT_LEFTCOL, 60);
     tft.println("Power off,");
-    tft.setCursor(10, 75);
+    tft.setCursor(TFT_LEFTCOL, 75);
     tft.println("check connections");
   }
   else {
     tft.println("Temperature"); 
-    tft.setCursor(10, 30);
+    tft.setCursor(TFT_LEFTCOL, 30);
     tft.println("following error");
-    tft.setCursor(10, 45);
+    tft.setCursor(TFT_LEFTCOL, 45);
     tft.print("during ");
     tft.println((error == 10) ? "heating" : "cooling");
   }
@@ -799,7 +813,7 @@ void updateProcessDisplay() {
     initialProcessDisplay = true;
 
     tft.fillScreen(ST7735_WHITE);
-    tft.fillRect(0, 0, tft.width(), menuItemHeight, ST7735_BLUE);
+    tft.fillRect(0, 0, TFT_WIDTH, menuItemHeight, ST7735_BLUE);
     tft.setCursor(2, y);
 #ifndef PIDTUNE
     tft.print("Profile ");
@@ -911,7 +925,7 @@ void updateProcessDisplay() {
   tft.drawPixel(dx, dy, ST7735_RED);
 
   // bottom line
-  y = 119;
+  y = TFT_HEIGHT - 1;
 
   // set values
   tft.setCursor(2, y);
@@ -938,7 +952,7 @@ void setup() {
   tft.initR(INITR_TABTYPE);
   tft.setTextWrap(false);
   tft.setTextSize(1);
-  tft.setRotation(1);
+  tft.setRotation(TFT_ROTATE);
 
   if (firstRun()) {
     factoryReset();
@@ -965,22 +979,31 @@ void setup() {
 
 #ifdef WITH_SPLASH
   // splash screen
-  tft.setCursor(10, 30);
   tft.setTextSize(2);
+  tft.setCursor((TFT_WIDTH >> 1) - 24, 8);
+  tft.print("Open");
+  tft.setCursor((TFT_WIDTH >> 1) - 36, 26); // 10
   tft.print("Reflow");
-  tft.setCursor(24, 48);
+  tft.setCursor((TFT_WIDTH >> 1) - 60, 44); // 24
   tft.print("Controller");
   tft.setTextSize(1);
-  tft.setCursor(52, 67);
-  tft.print("v"); tft.print(ver);
-  #ifdef FAKE_HW
+  tft.setCursor((TFT_WIDTH >> 1) - ((strlen(ver) * 3) + 24), 66); // 52
+  tft.print("version "); tft.print(ver);
+#ifdef FAKE_HW
   tft.print("-fake");
-  #endif
-  tft.setCursor(7, 119);
-  tft.print("(c)2014 karl@pitrich.com");
-  delay(1000);
+#endif
+  tft.setCursor((TFT_WIDTH >> 1) - 48, TFT_HEIGHT - 41);
+  tft.print("modified by true");
+  tft.setCursor((TFT_WIDTH >> 1) - 54, TFT_HEIGHT - 26);
+  tft.print("Copyright (c) 2014");
+  tft.setCursor((TFT_WIDTH >> 1) - 48, TFT_HEIGHT - 16);
+  tft.print("karl@pitrich.com");
+  delay(950);
 #endif
 
+  // disable second TC; not used yet
+  pinMode(TCOUPLE2_CS, OUTPUT);
+  digitalWrite(TCOUPLE2_CS, HIGH);
   // setup /CS line for thermocouple and read initial temperature
   A.chipSelect = TCOUPLE1_CS;
   pinMode(A.chipSelect, OUTPUT);
@@ -1177,7 +1200,7 @@ void loop(void)
     }
 
 #if 0 // verbose thermocouple error bits
-    tft.setCursor(10, 40);
+    tft.setCursor(TFT_LEFTCOL, 40);
     for (uint8_t mask = B111; mask; mask >>= 1) {
       tft.print(mask & A.stat ? '1' : '0');
     }
@@ -1373,7 +1396,7 @@ void loop(void)
 void memoryFeedbackScreen(uint8_t profileId, bool loading) {
   tft.fillScreen(ST7735_GREEN);
   tft.setTextColor(ST7735_BLACK);
-  tft.setCursor(10, 50);
+  tft.setCursor(TFT_LEFTCOL, 50);
   tft.print(loading ? "Loading" : "Saving");
   tft.print(" profile ");
   tft.print(profileId);  
@@ -1485,7 +1508,7 @@ void factoryReset() {
 
   tft.fillScreen(ST7735_RED);
   tft.setTextColor(ST7735_WHITE);
-  tft.setCursor(10, 50);
+  tft.setCursor(TFT_LEFTCOL, 50);
   tft.print("Resetting...");
 
   // then save the same profile settings into all slots
