@@ -4,14 +4,27 @@
 // (c) 2012-2013 Ed Simmons
 // ----------------------------------------------------------------------------
 
-//#define FAKE_HW 1
-//#define PIDTUNE 1 // autotune wouldn't fit in the 28k available on my arduino pro micro.
+#define ARDUINO_TYPE_NANO   0
+#define ARDUINO_TYPE_MINI   1
+#define ARDUINO_TYPE_MICRO  2
+
+
+// --CONFIGURATION-------------------------------------------------------------
+#define ARDUINO_TYPE        ARDUINO_TYPE_NANO
+#define BOARD_TYPE          1   // 0 = kp's design, 1 = true's design
+#define LINE_FREQ           60  // 50 or 60 supported
+
+#define INITR_TABTYPE       INITR_REDTAB  // lcd type, usually INITR_RED/GREEN/BLACKTAB
+
+//#define FAKE_HW             1
+//#define PIDTUNE             1   // autotune wouldn't fit in the 28k available on my arduino pro micro.
 
 // run a calibration loop that measures how many timer ticks occur between 2 zero corssings
 // FIXME: does not work reliably at the moment, so a oscilloscope-determined value is used.
 //#define WITH_CALIBRATION 1 // loop timing calibration
-#define DEFAULT_LOOP_DELAY 89 // should be about 16% less for 60Hz mains
 
+
+// --INCL----------------------------------------------------------------------
 #include <avr/eeprom.h>
 #include <EEPROM.h>
 #include <PID_v1.h>
@@ -21,63 +34,91 @@
 #include <Menu.h>
 #include <TimerOne.h>
 #include <ClickEncoder.h>
-#include "temperature.h"
-#include "helpers.h"
+
 #ifdef FAKE_HW
-#include <TimerThree.h>
+ #include <TimerThree.h>
 #endif
+
 #ifdef PIDTUNE
-#include <PID_AutoTune_v0.h>
+ #include <PID_AutoTune_v0.h>
 #endif
-// ----------------------------------------------------------------------------
 
-const char * ver = "3.1";
 
-// ----------------------------------------------------------------------------
+// --VER-----------------------------------------------------------------------
+const char * ver = "3.1_tr01";
 
-#define MS_PER_SINE 100       // for 50Hz mains; 100ms per sinusoid
-//#define MS_PER_SINE  83.333 // for 60Hz Mains; 83,3333ms per sinusoid
 
-// ----------------------------------------------------------------------------
-// Hardware Configuration 
+// --FREQ----------------------------------------------------------------------
+#if (LINE_FREQ == 50)
+  #define MS_PER_SINE         100     // for 50Hz mains; 100ms per sinusoid
+  #define DEFAULT_LOOP_DELAY  89
+#else
+  #define MS_PER_SINE         83.333  // for 60Hz mains; 83,3333ms per sinusoid
+  #define DEFAULT_LOOP_DELAY  74
+#endif
 
+
+// --HARDWARE CONFIG-----------------------------------------------------------
 // 1.8" TFT via SPI -> breadboard
 #ifdef FAKE_HW
-#define LCD_CS  10
-#define LCD_DC   7
-#define LCD_RST  8
-#else 
-#define LCD_CS   10
-#define LCD_DC   9
-#define LCD_RST  8
+ #define LCD_CS       10
+ #define LCD_DC       7
+ #define LCD_RST      8
+#elif (BOARD_TYPE == 0)  // kp's design
+ #define LCD_CS       10
+ #define LCD_DC       9
+ #define LCD_RST      8
+#elif (BOARD_TYPE == 1)  // true's design
+ #define LCD_CS       6
+ #define LCD_DC       9
+ #define LCD_RST      8
 #endif
 
-// Thermocouple via SPI
-#define THERMOCOUPLE1_CS  3
+// Maxim TC
+#define TCOUPLE1_CS  3
+#define TCOUPLE2_CS  4
 
+// SSR
 #define PIN_HEATER   0 // SSR for the heater
 #define PIN_FAN      1 // SSR for the fan
 
+// ZX Circuit
 #define PIN_ZX       2 // pin for zero crossing detector
-#define INT_ZX       1 // interrupt for zero crossing detector
+
+#if (ARDUINO_TYPE == ARDUINO_TYPE_MICRO)
+  #define INT_ZX     1 // interrupt for ZX detector (pro micro)
+#else
+  #define INT_ZX     0 // interrupt for ZX detector (pro mini/nano)
+#endif
                        // Leonardo == Pro Micro:
                        //   Pin: 3 2 0 1 7
                        //   Int: 0 1 2 3 4 
 
-// ----------------------------------------------------------------------------
 
+// --SPLASH SCREEN-------------------------------------------------------------
 #define WITH_SPLASH 1
 
-// ----------------------------------------------------------------------------
 
+// --LOCAL INCL----------------------------------------------------------------
+#include "temperature.h"
+#include "helpers.h"
+
+
+// --GLOBALS-------------------------------------------------------------------
 volatile uint32_t timerTicks     = 0;
 volatile uint32_t zeroCrossTicks = 0;
 volatile uint8_t  phaseCounter   = 0;
 
+uint32_t startCycleZeroCrossTicks;
+uint32_t lastUpdate = 0;
+uint32_t lastDisplayUpdate = 0;
+
 char buf[20]; // generic char buffer
 
-// ----------------------------------------------------------------------------
+Thermocouple A;
 
+
+// --PROFILES------------------------------------------------------------------
 // data type for the values used in the reflow profile
 typedef struct profileValues_s {
   int16_t soakTemp;
@@ -102,25 +143,17 @@ const uint16_t offsetFanSpeed   = maxProfiles * sizeof(Profile_t) + 1; // one by
 const uint16_t offsetProfileNum = maxProfiles * sizeof(Profile_t) + 2; // one byte
 const uint16_t offsetPidConfig  = maxProfiles * sizeof(Profile_t) + 3; // sizeof(PID_t)
 
-Thermocouple A;
 
-// ----------------------------------------------------------------------------
+// --UI------------------------------------------------------------------------
+// NB: Adafruit GFX ASCII-Table is bogous:
+//     https://github.com/adafruit/Adafruit-GFX-Library/issues/22
 
-uint32_t startCycleZeroCrossTicks;
-uint32_t lastUpdate = 0;
-uint32_t lastDisplayUpdate = 0;
-
-// ----------------------------------------------------------------------------
-// UI
-
-// NB: Adafruit GFX ASCII-Table is bogous: https://github.com/adafruit/Adafruit-GFX-Library/issues/22
-//
 Adafruit_ST7735 tft = Adafruit_ST7735(LCD_CS, LCD_DC, LCD_RST);
 
 #ifdef FAKE_HW
-ClickEncoder Encoder(A0, A1, A2, 2);
+ ClickEncoder Encoder(A0, A1, A2, 2);
 #else
-ClickEncoder Encoder(A1, A0, A2, 2);
+ ClickEncoder Encoder(A1, A0, A2, 2);
 #endif
 
 Menu::Engine Engine;
@@ -134,9 +167,8 @@ const uint8_t menuItemHeight = 12;
 bool menuUpdateRequest = true;
 bool initialProcessDisplay = false;
 
-// ----------------------------------------------------------------------------
-// state machine
 
+// --STATE MACHINE-------------------------------------------------------------
 typedef enum {
   None     = 0,
   Idle     = 1,
@@ -162,8 +194,6 @@ State previousState = Idle;
 bool stateChanged = false;
 uint32_t stateChangedTicks = 0;
 
-// ----------------------------------------------------------------------------
-
 // track menu item state to improve render preformance
 typedef struct {
   const Menu::Item_t *mi;
@@ -182,17 +212,16 @@ void clearLastMenuItemRenderState() {
   }
 }
 
-// ----------------------------------------------------------------------------
 
+// ----------------------------------------------------------------------------
 extern const Menu::Item_t miRampUpRate, miRampDnRate, miSoakTime, 
                           miSoakTemp, miPeakTime, miPeakTemp,
                           miLoadProfile, miSaveProfile,
                           miPidSettingP, miPidSettingI, miPidSettingD,
                           miFanSettings;
 
-// ----------------------------------------------------------------------------
-// PID
 
+// --PID-----------------------------------------------------------------------
 uint8_t fanValue;
 uint8_t heaterValue;
 
@@ -221,8 +250,28 @@ double aTuneStep       =  50,
 unsigned int aTuneLookBack = 30;
 #endif
 
-// ----------------------------------------------------------------------------
 
+// --HELPERS-------------------------------------------------------------------
+void printDouble(double val, uint8_t precision = 1) {
+  ftoa(buf, val, precision);
+  tft.print(buf);
+}
+
+void alignRightPrefix(uint16_t v) {
+  if (v < 1e2) tft.print(' '); 
+  if (v < 1e1) tft.print(' ');
+}
+
+bool isPidSetting(const Menu::Item_t *mi) {
+  return mi == &miPidSettingP || mi == &miPidSettingI || mi == &miPidSettingD;
+}
+
+bool isRampSetting(const Menu::Item_t *mi) {
+  return mi == &miRampUpRate || mi == &miRampDnRate;
+}
+
+
+// --MENU FN-------------------------------------------------------------------
 bool menuExit(const Menu::Action_t a) {
   clearLastMenuItemRenderState();
   Engine.lastInvokedItem = &Menu::NullItem;
@@ -230,20 +279,9 @@ bool menuExit(const Menu::Action_t a) {
   return false;
 }
 
-// ----------------------------------------------------------------------------
-
 bool menuDummy(const Menu::Action_t a) {
   return true;
 }
-
-// ----------------------------------------------------------------------------
-
-void printDouble(double val, uint8_t precision = 1) {
-  ftoa(buf, val, precision);
-  tft.print(buf);
-}
-
-// ----------------------------------------------------------------------------
 
 void getItemValuePointer(const Menu::Item_t *mi, double **d, int16_t **i) {
   if (mi == &miRampUpRate)  *d = &activeProfile.rampUpRate;
@@ -257,18 +295,6 @@ void getItemValuePointer(const Menu::Item_t *mi, double **d, int16_t **i) {
   if (mi == &miPidSettingD) *d = &heaterPID.Kd; 
   if (mi == &miFanSettings) *i = &fanAssistSpeed;
 }
-
-// ----------------------------------------------------------------------------
-
-bool isPidSetting(const Menu::Item_t *mi) {
-  return mi == &miPidSettingP || mi == &miPidSettingI || mi == &miPidSettingD;
-}
-
-bool isRampSetting(const Menu::Item_t *mi) {
-  return mi == &miRampUpRate || mi == &miRampDnRate;
-}
-
-// ----------------------------------------------------------------------------
 
 bool getItemValueLabel(const Menu::Item_t *mi, char *label) {
   int16_t *iValue = NULL;
@@ -302,8 +328,6 @@ bool getItemValueLabel(const Menu::Item_t *mi, char *label) {
 
   return dValue || iValue;
 }
-
-// ----------------------------------------------------------------------------
 
 bool editNumericalValue(const Menu::Action_t action) { 
   if (action == Menu::actionDisplay) {
@@ -385,8 +409,8 @@ bool editNumericalValue(const Menu::Action_t action) {
   }
 }
 
-// ----------------------------------------------------------------------------
 
+// --RESET---------------------------------------------------------------------
 bool factoryReset(const Menu::Action_t action) {
 #ifndef PIDTUNE
   if (action == Menu::actionDisplay) {
@@ -419,12 +443,11 @@ bool factoryReset(const Menu::Action_t action) {
 #endif // PIDTUNE
 }
 
-// ----------------------------------------------------------------------------
-
+// --PROFILE PROTOTYPE---------------------------------------------------------
 void saveProfile(unsigned int targetProfile, bool quiet = false);
 
-// ----------------------------------------------------------------------------
 
+// --PROFILE FN----------------------------------------------------------------
 bool saveLoadProfile(const Menu::Action_t action) {
 #ifndef PIDTUNE
   bool isLoad = Engine.currentItem == &miLoadProfile;
@@ -468,8 +491,8 @@ bool saveLoadProfile(const Menu::Action_t action) {
 #endif // PIDTUNE
 }
 
-// ----------------------------------------------------------------------------
 
+// ----------------------------------------------------------------------------
 void toggleAutoTune();
 
 bool cycleStart(const Menu::Action_t action) {
@@ -489,8 +512,8 @@ bool cycleStart(const Menu::Action_t action) {
   return true;
 }
 
-// ----------------------------------------------------------------------------
 
+// --RENDER--------------------------------------------------------------------
 void renderMenuItem(const Menu::Item_t *mi, uint8_t pos) {
   //ScopedTimer tm("  render menuitem");
   bool isCurrent = Engine.currentItem == mi;
@@ -527,9 +550,8 @@ void renderMenuItem(const Menu::Item_t *mi, uint8_t pos) {
   currentlyRenderedItems[pos].current = isCurrent;
 }
 
-// ----------------------------------------------------------------------------
+// --MENU ITEMS----------------------------------------------------------------
 // Name, Label, Next, Previous, Parent, Child, Callback
-
 MenuItem(miExit, "", Menu::NullItem, Menu::NullItem, Menu::NullItem, miCycleStart, menuExit);
 
 #ifndef PIDTUNE
@@ -553,8 +575,8 @@ MenuItem(miPidSettings,  "PID Settings",  miFactoryReset, miFanSettings, miExit,
   MenuItem(miPidSettingD,  "Heater Kd",  Menu::NullItem, miPidSettingI, miPidSettings, Menu::NullItem, editNumericalValue);
 MenuItem(miFactoryReset, "Factory Reset", Menu::NullItem, miPidSettings, miExit, Menu::NullItem, factoryReset);
 
-// ----------------------------------------------------------------------------
 
+// --TC------------------------------------------------------------------------
 #define NUMREADINGS 10
 
 typedef struct {
@@ -572,9 +594,9 @@ double totalT1 = 0;             // the running total
 double averageT1 = 0;           // the average
 uint8_t index = 0;              // the index of the current reading
 
-// ----------------------------------------------------------------------------
+
+// --SSR-----------------------------------------------------------------------
 // Ensure that Solid State Relais are off when starting
-//
 void setupRelayPins(void) {
   DDRD  |= (1 << 2) | (1 << 3); // output
   //PORTD &= ~((1 << 2) | (1 << 3));
@@ -587,8 +609,9 @@ void killRelayPins(void) {
   PORTD |= (1 << 2) | (1 << 3);
 }
 
-// ----------------------------------------------------------------------------
-// wave packet control: only turn the solid state relais on for a percentage 
+
+// --WAVE PACKET---------------------------------------------------------------
+// only turn the solid state relais on for a percentage 
 // of complete sinusoids (i.e. 1x 360°)
 
 #define CHANNELS       2
@@ -624,6 +647,7 @@ struct {
 };
 #endif
 
+
 // ----------------------------------------------------------------------------
 // Zero Crossing ISR; per ZX, process one channel per interrupt only
 // NB: use native port IO instead of digitalWrite for better performance
@@ -656,9 +680,8 @@ void zeroCrossingIsr(void) {
 #endif
 }
 
-// ----------------------------------------------------------------------------
-// timer interrupt handling
 
+// --TIMER ISR-----------------------------------------------------------------
 void timerIsr(void) { // ticks with 100µS
   static uint32_t lastTicks = 0;
 
@@ -697,8 +720,8 @@ void timerIsr(void) { // ticks with 100µS
 #endif
 }
 
-// ----------------------------------------------------------------------------
 
+// ----------------------------------------------------------------------------
 void abortWithError(int error) {
   killRelayPins();
 
@@ -740,8 +763,8 @@ void abortWithError(int error) {
   }
 }
 
-// ----------------------------------------------------------------------------
 
+// ----------------------------------------------------------------------------
 void displayThermocoupleData(struct Thermocouple* input) {
   switch (input->stat) {
     case 0:
@@ -754,13 +777,8 @@ void displayThermocoupleData(struct Thermocouple* input) {
   }
 }
 
-// ----------------------------------------------------------------------------
 
-void alignRightPrefix(uint16_t v) {
-  if (v < 1e2) tft.print(' '); 
-  if (v < 1e1) tft.print(' ');
-}
-
+// --PROCESS GRAPH-------------------------------------------------------------
 uint16_t pxPerS;
 uint16_t pxPerC;
 uint16_t xOffset; // used for wraparound on x axis
@@ -912,12 +930,12 @@ void updateProcessDisplay() {
   tft.print("\367C/s    ");
 }
 
-// ----------------------------------------------------------------------------
 
+// --INIT----------------------------------------------------------------------
 void setup() {
   setupRelayPins();
 
-  tft.initR(INITR_BLACKTAB);
+  tft.initR(INITR_TABTYPE);
   tft.setTextWrap(false);
   tft.setTextSize(1);
   tft.setRotation(1);
@@ -964,7 +982,7 @@ void setup() {
 #endif
 
   // setup /CS line for thermocouple and read initial temperature
-  A.chipSelect = THERMOCOUPLE1_CS;
+  A.chipSelect = TCOUPLE1_CS;
   pinMode(A.chipSelect, OUTPUT);
   digitalWrite(A.chipSelect, HIGH);
 #ifndef FAKE_HW
@@ -1060,8 +1078,8 @@ void toggleAutoTune() {
 uint8_t thermocoupleErrorCount;
 #define TC_ERROR_TOLERANCE 5 // allow for n consecutive errors due to noisy power supply before bailing out
 
-// ----------------------------------------------------------------------------
 
+// --MAINLINE------------------------------------------------------------------
 void loop(void) 
 {
   // --------------------------------------------------------------------------
@@ -1361,6 +1379,8 @@ void memoryFeedbackScreen(uint8_t profileId, bool loading) {
   tft.print(profileId);  
 }
 
+
+// --EEPROM------------------------------------------------------------------
 void saveProfile(unsigned int targetProfile, bool quiet) {
 #ifndef PIDTUNE
   activeProfileId = targetProfile;
