@@ -21,16 +21,6 @@
 
 #define TFT_ROTATE          1   // 0 or 2 = vertical, 1 or 3 = horizontal
 
-#if (TFT_ROTATE == 1 || TFT_ROTATE == 3)
-  #define TFT_LEFTCOL       10
-  #define TFT_WIDTH         160
-  #define TFT_HEIGHT        128
-#else
-  #define TFT_LEFTCOL       4
-  #define TFT_WIDTH         128
-  #define TFT_HEIGHT        160
-#endif
-
 //#define FAKE_HW             1
 //#define PIDTUNE             1   // autotune wouldn't fit in the 28k available on my arduino pro micro.
 
@@ -65,10 +55,10 @@ const char * ver = "3.1_tr01";
 
 // --FREQ----------------------------------------------------------------------
 #if (LINE_FREQ == 50)
-  #define MS_PER_SINE         100     // for 50Hz mains; 100ms per sinusoid
+  #define MS_PER_SINE         100     // for 50Hz mains, 100ms per sinusoid
   #define DEFAULT_LOOP_DELAY  89
 #else
-  #define MS_PER_SINE         83.333  // for 60Hz mains; 83,3333ms per sinusoid
+  #define MS_PER_SINE         83.333  // for 60Hz mains, 83.333ms per sinusoid
   #define DEFAULT_LOOP_DELAY  74
 #endif
 
@@ -94,8 +84,8 @@ const char * ver = "3.1_tr01";
 #define TCOUPLE2_CS  4
 
 // SSR
-#define PIN_HEATER   0 // SSR for the heater
-#define PIN_FAN      1 // SSR for the fan
+#define PIN_HEATER   0 // SSR output for the heater
+#define PIN_FAN      1 // SSR output for the fan
 
 // ZX Circuit
 #define PIN_ZX       2 // pin for zero crossing detector
@@ -125,11 +115,12 @@ volatile uint32_t zeroCrossTicks = 0;
 volatile uint8_t  phaseCounter   = 0;
 
 uint32_t startCycleZeroCrossTicks;
-uint32_t lastUpdate = 0;
-uint32_t lastDisplayUpdate = 0;
+uint32_t lastUpdate              = 0;
+uint32_t lastDisplayUpdate       = 0;
 
 char buf[20]; // generic char buffer
 
+#define TC_ERROR_TOLERANCE         5  // allow for n consecutive errors before bailing out
 Thermocouple A;
 
 
@@ -164,6 +155,16 @@ const uint16_t offsetPidConfig  = maxProfiles * sizeof(Profile_t) + 3; // sizeof
 //     https://github.com/adafruit/Adafruit-GFX-Library/issues/22
 
 Adafruit_ST7735 tft = Adafruit_ST7735(LCD_CS, LCD_DC, LCD_RST);
+
+#if (TFT_ROTATE == 1 || TFT_ROTATE == 3)
+ #define TFT_LEFTCOL        10
+ #define TFT_WIDTH          160
+ #define TFT_HEIGHT         128
+#else
+ #define TFT_LEFTCOL        4
+ #define TFT_WIDTH          128
+ #define TFT_HEIGHT         160
+#endif
 
 #ifdef FAKE_HW
  ClickEncoder Encoder(A0, A1, A2, 2);
@@ -610,17 +611,20 @@ uint8_t index = 0;              // the index of the current reading
 
 
 // --SSR-----------------------------------------------------------------------
-// Ensure that Solid State Relais are off when starting
+// Ensure that relay outputs are off (low) when starting
 void setupRelayPins(void) {
-  DDRD  |= (1 << 2) | (1 << 3); // output
-  //PORTD &= ~((1 << 2) | (1 << 3));
-  PORTD |= (1 << 2) | (1 << 3); // off
+  digitalWrite(PIN_HEATER, LOW);
+  pinMode(PIN_HEATER, OUTPUT);
+  
+  digitalWrite(PIN_FAN, LOW);
+  pinMode(PIN_FAN, OUTPUT);
 }
 
 void killRelayPins(void) {
   Timer1.stop();
   detachInterrupt(INT_ZX);
-  PORTD |= (1 << 2) | (1 << 3);
+  digitalWrite(PIN_HEATER, LOW);
+  digitalWrite(PIN_FAN, LOW);
 }
 
 
@@ -637,14 +641,13 @@ typedef struct Channel_s {
   uint8_t state;           // current state counter
   int32_t next;            // when the next change in output shall occur  
   bool action;             // hi/lo active
-  uint8_t pin;             // io pin of solid state relais
+  uint8_t *port;           // io port of SSR / output device (PORT register)
+  uint8_t pin;             // io pin of SSR / output device
 } Channel_t;
 
 Channel_t Channels[CHANNELS] = {
-  // heater
-  { 0, 0, 0, false, 2 }, // PD2 == RX == Arduino Pin 0
-  // fan
-  { 0, 0, 0, false, 3 }  // PD3 == TX == Arduino Pin 1
+  { 0, 0, 0, false },
+  { 0, 0, 0, false }
 };
 
 // delay to align relay activation with the actual zero crossing
@@ -705,18 +708,22 @@ void timerIsr(void) { // ticks with 100µS
   }
 
   if (phaseCounter > Channels[CHANNEL_FAN].target) {
-    PORTD &= ~(1 << Channels[CHANNEL_FAN].pin);
+    *(Channels[CHANNEL_FAN].port) &= ~Channels[CHANNEL_FAN].pin;
   }
   else {
-    PORTD |=  (1 << Channels[CHANNEL_FAN].pin);
+    *(Channels[CHANNEL_FAN].port) |=  Channels[CHANNEL_FAN].pin;
   }
 
   // wave packet control for heater
   if (Channels[CHANNEL_HEATER].next > lastTicks // FIXME: this looses ticks when overflowing
       && timerTicks > Channels[CHANNEL_HEATER].next) 
   {
-    if (Channels[CHANNEL_HEATER].action) PORTD |= (1 << Channels[CHANNEL_HEATER].pin);
-    else PORTD &= ~(1 << Channels[CHANNEL_HEATER].pin);
+    if (Channels[CHANNEL_HEATER].action) { 
+      *(Channels[CHANNEL_HEATER].port) |=  Channels[CHANNEL_HEATER].pin;
+    }
+    else {
+      *(Channels[CHANNEL_HEATER].port) &= ~Channels[CHANNEL_HEATER].pin;
+    }
     lastTicks = timerTicks;
   }
 
@@ -947,8 +954,17 @@ void updateProcessDisplay() {
 
 // --INIT----------------------------------------------------------------------
 void setup() {
+  // configure SSR outputs to initial state
   setupRelayPins();
+  
+  // fill in missing heater and fan channel ports/pins
+  Channels[CHANNEL_HEATER].port = (uint8_t *)portOutputRegister(digitalPinToPort(PIN_HEATER));
+  Channels[CHANNEL_HEATER].pin = digitalPinToBitMask(PIN_HEATER);
+  
+  Channels[CHANNEL_FAN].port = (uint8_t *)portOutputRegister(digitalPinToPort(PIN_FAN));
+  Channels[CHANNEL_FAN].pin = digitalPinToBitMask(PIN_FAN);
 
+  // start up LCD
   tft.initR(INITR_TABTYPE);
   tft.setTextWrap(false);
   tft.setTextSize(1);
@@ -965,6 +981,7 @@ void setup() {
   tft.fillScreen(ST7735_WHITE);
   tft.setTextColor(ST7735_BLACK, ST7735_WHITE);
 
+  // mainline timer
   Timer1.initialize(100);
   Timer1.attachInterrupt(timerIsr);
 
@@ -1099,7 +1116,6 @@ void toggleAutoTune() {
 // ----------------------------------------------------------------------------
 
 uint8_t thermocoupleErrorCount;
-#define TC_ERROR_TOLERANCE 5 // allow for n consecutive errors due to noisy power supply before bailing out
 
 
 // --MAINLINE------------------------------------------------------------------
