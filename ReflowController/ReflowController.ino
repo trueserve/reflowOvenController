@@ -40,17 +40,13 @@
 #include <TimerOne.h>
 #include <ClickEncoder.h>
 
-#ifdef FAKE_HW
- #include <TimerThree.h>
-#endif
-
 #ifdef PIDTUNE
  #include <PID_AutoTune_v0.h>
 #endif
 
 
 // --VER-----------------------------------------------------------------------
-const char * ver = "3.1_tr01";
+const char *ver = "3.1_tr01";
 
 
 // --FREQ----------------------------------------------------------------------
@@ -65,11 +61,7 @@ const char * ver = "3.1_tr01";
 
 // --HARDWARE CONFIG-----------------------------------------------------------
 // 1.8" TFT via SPI -> breadboard
-#ifdef FAKE_HW
- #define LCD_CS       10
- #define LCD_DC       7
- #define LCD_RST      8
-#elif (BOARD_TYPE == 0)  // kp's design
+#if   (BOARD_TYPE == 0)  // kp's design
  #define LCD_CS       10
  #define LCD_DC       9
  #define LCD_RST      8
@@ -91,9 +83,9 @@ const char * ver = "3.1_tr01";
 #define PIN_ZX       2 // pin for zero crossing detector
 
 #if (ARDUINO_TYPE == ARDUINO_TYPE_MICRO)
-  #define INT_ZX     1 // interrupt for ZX detector (pro micro)
+ #define INT_ZX      1 // interrupt for ZX detector (pro micro)
 #else
-  #define INT_ZX     0 // interrupt for ZX detector (pro mini/nano)
+ #define INT_ZX      0 // interrupt for ZX detector (pro mini/nano)
 #endif
                        // Leonardo == Pro Micro:
                        //   Pin: 3 2 0 1 7
@@ -166,11 +158,7 @@ Adafruit_ST7735 tft = Adafruit_ST7735(LCD_CS, LCD_DC, LCD_RST);
  #define TFT_HEIGHT         160
 #endif
 
-#ifdef FAKE_HW
- ClickEncoder Encoder(A0, A1, A2, 2);
-#else
- ClickEncoder Encoder(A1, A0, A2, ENC_STEPS_PER_NOTCH);
-#endif
+ClickEncoder Encoder(A1, A0, A2, ENC_STEPS_PER_NOTCH);
 
 Menu::Engine Engine;
 
@@ -552,7 +540,9 @@ void setupRelayPins(void) {
 
 void killRelayPins(void) {
   Timer1.stop();
+#ifndef FAKE_HW
   detachInterrupt(INT_ZX);
+#endif
   digitalWrite(PIN_HEATER, LOW);
   digitalWrite(PIN_FAN, LOW);
 }
@@ -627,6 +617,17 @@ void zeroCrossingIsr(void) {
 #endif
 }
 
+#ifdef FAKE_HW
+uint8_t fakehw_isr_freq = 0;
+
+ISR(TIMER2_COMPA_vect) {    
+  ++fakehw_isr_freq %= 2;
+  if (fakehw_isr_freq) zeroCrossingIsr();
+
+  TCNT2  = 0x00;  // reset counter
+  // interrupt flag is cleared automatically by hardware
+}
+#endif
 
 // --TIMER ISR-----------------------------------------------------------------
 void timerIsr(void) { // ticks with 100µS
@@ -888,7 +889,7 @@ bool factoryReset(const Menu::Action_t action) {
     }
   }
   
-  if (action == Menu::actionParent) { // do it
+  if ((currentState == Edit) && (action == Menu::actionParent)) { // do it
     factoryReset();
   }
   
@@ -968,19 +969,6 @@ void setup() {
   tft.fillScreen(ST7735_WHITE);
   tft.setTextColor(ST7735_BLACK, ST7735_WHITE);
 
-  // mainline timer
-  Timer1.initialize(100);
-  Timer1.attachInterrupt(timerIsr);
-
-#ifndef FAKE_HW
-  pinMode(PIN_ZX, INPUT_PULLUP);
-  attachInterrupt(INT_ZX, zeroCrossingIsr, RISING);
-  delay(100);
-#else
-  Timer3.initialize(1000); // x10 speed
-  Timer3.attachInterrupt(zeroCrossingIsr);
-#endif
-
 #ifdef WITH_SPLASH
   // splash screen
   tft.setTextSize(2);
@@ -1005,19 +993,48 @@ void setup() {
   delay(950);
 #endif
 
+  loadFanSpeed();
+  loadPID();
+
+  PID.SetOutputLimits(0, 100); // max output 100%
+  PID.SetMode(AUTOMATIC);
+
+  // mainline timer
+  Timer1.initialize(100);
+  Timer1.attachInterrupt(timerIsr);
+  
+#ifndef FAKE_HW
+  pinMode(PIN_ZX, INPUT_PULLUP);
+  attachInterrupt(INT_ZX, zeroCrossingIsr, RISING);
+  delay(100);
+#else
+  TCCR2B = 0x00;  // disable timer2
+  TCCR2A = 0x00;  // set as normal timer
+  TCNT2  = 0x00;  // reset counter
+  OCR2A  = ((LINE_FREQ * 2) / 15625);
+
+  TIFR2  = 0x00;  // clear all interrupt flags
+  TIMSK2 = 0x02;  // enable overflow interrupt
+  
+  TCCR2B = 0x07;  // enable, set prescaler /1024
+#endif
+
   // disable second TC; not used yet
   pinMode(TCOUPLE2_CS, OUTPUT);
   digitalWrite(TCOUPLE2_CS, HIGH);
+
   // setup /CS line for thermocouple and read initial temperature
   A.chipSelect = TCOUPLE1_CS;
   pinMode(A.chipSelect, OUTPUT);
   digitalWrite(A.chipSelect, HIGH);
+
 #ifndef FAKE_HW
   readThermocouple(&A);
-#endif
+
   if (A.stat != 0) {
     abortWithError(A.stat);
   }
+#endif
 
   // initialize moving average filter
   runningTotalRampRate = A.temperature * NUMREADINGS;
@@ -1044,12 +1061,6 @@ void setup() {
 #else
   zxLoopDelay = DEFAULT_LOOP_DELAY;
 #endif
-
-  loadFanSpeed();
-  loadPID();
-
-  PID.SetOutputLimits(0, 100); // max output 100%
-  PID.SetMode(AUTOMATIC);
 
   delay(1000);
 
@@ -1108,6 +1119,8 @@ uint8_t thermocoupleErrorCount;
 // --MAINLINE------------------------------------------------------------------
 void loop(void) 
 {
+  bool menuUpdateLocal = false;
+  
   // --------------------------------------------------------------------------
   // handle encoder
   //
@@ -1116,7 +1129,7 @@ void loop(void)
     encAbsolute += encMovement;
     if (currentState == Settings) {
       Engine.navigate((encMovement > 0) ? Engine.getNext() : Engine.getPrev());
-      menuUpdateRequest = true;
+      menuUpdateLocal = true;
     }
   }
 
@@ -1125,14 +1138,14 @@ void loop(void)
   //
   switch (Encoder.getButton()) {
     case ClickEncoder::Clicked: {
-      if (currentState == Complete) { // at end of cycle; reset at click
-        menuExit(Menu::actionDisplay); // reset to initial state
+      if (currentState == Complete) {   // at end of cycle; reset at click
+        menuExit(Menu::actionDisplay);  // reset to initial state
         Engine.navigate(&miCycleStart);
         currentState = Settings;
-        menuUpdateRequest = true;
+        menuUpdateLocal = true;
       }
       else if (currentState < UIMenuEnd) {
-        menuUpdateRequest = true;
+        menuUpdateLocal = true;
         Engine.invoke();
       }
       else if (currentState > UIMenuEnd) {
@@ -1140,12 +1153,12 @@ void loop(void)
       }
       break;
     }
-
+   
     case ClickEncoder::DoubleClicked: {
       if (currentState < UIMenuEnd) {
         if (Engine.getParent() != &miExit) {
           Engine.navigate(Engine.getParent());
-          menuUpdateRequest = true;
+          menuUpdateLocal = true;
         }
       }
       break;
@@ -1164,7 +1177,7 @@ void loop(void)
   // --------------------------------------------------------------------------
   // handle menu update
   //
-  if (menuUpdateRequest) {
+  if (menuUpdateRequest || menuUpdateLocal) {
     menuUpdateRequest = false;
     if (currentState < UIMenuEnd && !encMovement && currentState != Edit && previousState != Edit) { // clear menu on child/parent navigation
       tft.fillScreen(ST7735_WHITE);
@@ -1189,10 +1202,7 @@ void loop(void)
 
 #ifndef FAKE_HW
     readThermocouple(&A); // should be sufficient to read it every 250ms or 500ms
-#else
-    A.temperature = encAbsolute;
-#endif
-
+    
     if (A.stat > 0) {
       thermocoupleErrorCount++;
     }
@@ -1203,6 +1213,9 @@ void loop(void)
     if (thermocoupleErrorCount > TC_ERROR_TOLERANCE) {
       abortWithError(A.stat);
     }
+#else
+    A.temperature = encAbsolute;
+#endif
 
 #if 0 // verbose thermocouple error bits
     tft.setCursor(TFT_LEFTCOL, 40);
