@@ -633,6 +633,7 @@ void killRelayPins(void) {
 // of complete sinusoids (i.e. 1x 360°)
 
 #define CHANNELS       2
+
 #define CHANNEL_HEATER 0
 #define CHANNEL_FAN    1
 
@@ -641,11 +642,9 @@ typedef struct Channel_s {
   uint8_t state;           // current state counter
   int32_t next;            // when the next change in output shall occur  
   bool action;             // hi/lo active
-  uint8_t *port;           // io port of SSR / output device (PORT register)
-  uint8_t pin;             // io pin of SSR / output device
 } Channel_t;
 
-Channel_t Channels[CHANNELS] = {
+Channel_t Channels[] = {
   { 0, 0, 0, false },
   { 0, 0, 0, false }
 };
@@ -707,23 +706,13 @@ void timerIsr(void) { // ticks with 100µS
     phaseCounter = 0;
   }
 
-  if (phaseCounter > Channels[CHANNEL_FAN].target) {
-    *(Channels[CHANNEL_FAN].port) &= ~Channels[CHANNEL_FAN].pin;
-  }
-  else {
-    *(Channels[CHANNEL_FAN].port) |=  Channels[CHANNEL_FAN].pin;
-  }
+  digitalWrite(PIN_FAN, (phaseCounter > Channels[CHANNEL_FAN].target) ? LOW : HIGH);
 
   // wave packet control for heater
   if (Channels[CHANNEL_HEATER].next > lastTicks // FIXME: this looses ticks when overflowing
-      && timerTicks > Channels[CHANNEL_HEATER].next) 
+          && timerTicks > Channels[CHANNEL_HEATER].next)
   {
-    if (Channels[CHANNEL_HEATER].action) { 
-      *(Channels[CHANNEL_HEATER].port) |=  Channels[CHANNEL_HEATER].pin;
-    }
-    else {
-      *(Channels[CHANNEL_HEATER].port) &= ~Channels[CHANNEL_HEATER].pin;
-    }
+    digitalWrite(PIN_HEATER, Channels[CHANNEL_HEATER].action ? HIGH : LOW);   
     lastTicks = timerTicks;
   }
 
@@ -957,13 +946,6 @@ void setup() {
   // configure SSR outputs to initial state
   setupRelayPins();
   
-  // fill in missing heater and fan channel ports/pins
-  Channels[CHANNEL_HEATER].port = (uint8_t *)portOutputRegister(digitalPinToPort(PIN_HEATER));
-  Channels[CHANNEL_HEATER].pin = digitalPinToBitMask(PIN_HEATER);
-  
-  Channels[CHANNEL_FAN].port = (uint8_t *)portOutputRegister(digitalPinToPort(PIN_FAN));
-  Channels[CHANNEL_FAN].pin = digitalPinToBitMask(PIN_FAN);
-
   // start up LCD
   tft.initR(INITR_TABTYPE);
   tft.setTextWrap(false);
