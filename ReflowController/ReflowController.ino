@@ -497,6 +497,7 @@ void renderMenuItem(const Menu::Item_t *mi, uint8_t pos) {
 // --MENU ITEMS----------------------------------------------------------------
 // Name, Label, Next, Previous, Parent, Child, Callback
 MenuItem(miExit, "", Menu::NullItem, Menu::NullItem, Menu::NullItem, miCycleStart, menuExit);
+MenuItem(miEditable, "", Menu::NullItem, Menu::NullItem, Menu::NullItem, miCycleStart, menuExit);
 
 #ifndef PIDTUNE
 MenuItem(miCycleStart,  "Start Cycle",  miEditProfile, Menu::NullItem, miExit, Menu::NullItem, cycleStart);
@@ -510,14 +511,14 @@ MenuItem(miEditProfile, "Edit Profile", miLoadProfile, miCycleStart,   miExit, m
   MenuItem(miPeakTemp,   "Peak temp", miPeakTime,      miSoakTime,     miEditProfile, Menu::NullItem, editNumericalValue);
   MenuItem(miPeakTime,   "Peak time", miRampDnRate,    miPeakTemp,     miEditProfile, Menu::NullItem, editNumericalValue);
   MenuItem(miRampDnRate, "Ramp down", Menu::NullItem,  miPeakTime,     miEditProfile, Menu::NullItem, editNumericalValue);
-MenuItem(miLoadProfile,  "Load Profile",  miSaveProfile,  miEditProfile, miExit, Menu::NullItem, saveLoadProfile);
-MenuItem(miSaveProfile,  "Save Profile",  miFanSettings,  miLoadProfile, miExit, Menu::NullItem, saveLoadProfile);
+MenuItem(miLoadProfile,  "Load Profile",  miSaveProfile,  miEditProfile, miEditable, Menu::NullItem, saveLoadProfile);
+MenuItem(miSaveProfile,  "Save Profile",  miFanSettings,  miLoadProfile, miEditable, Menu::NullItem, saveLoadProfile);
 MenuItem(miFanSettings,  "Fan Speed",  miPidSettings,  miSaveProfile, miExit, Menu::NullItem, editNumericalValue);
 MenuItem(miPidSettings,  "PID Settings",  miFactoryReset, miFanSettings, miExit, miPidSettingP,  menuDummy);
   MenuItem(miPidSettingP,  "Heater Kp",  miPidSettingI, Menu::NullItem, miPidSettings, Menu::NullItem, editNumericalValue);
   MenuItem(miPidSettingI,  "Heater Ki",  miPidSettingD, miPidSettingP,  miPidSettings, Menu::NullItem, editNumericalValue);
   MenuItem(miPidSettingD,  "Heater Kd",  Menu::NullItem, miPidSettingI, miPidSettings, Menu::NullItem, editNumericalValue);
-MenuItem(miFactoryReset, "Factory Reset", Menu::NullItem, miPidSettings, miExit, Menu::NullItem, factoryReset);
+MenuItem(miFactoryReset, "Factory Reset", Menu::NullItem, miPidSettings, miEditable, Menu::NullItem, factoryReset);
 
 
 // --TC------------------------------------------------------------------------
@@ -1142,8 +1143,10 @@ void loop(void)
 
     case ClickEncoder::DoubleClicked: {
       if (currentState < UIMenuEnd) {
-        Engine.navigate(Engine.getParent());
-        menuUpdateRequest = true;
+        if (Engine.getParent() != &miExit) {
+          Engine.navigate(Engine.getParent());
+          menuUpdateRequest = true;
+        }
       }
       break;
     }
