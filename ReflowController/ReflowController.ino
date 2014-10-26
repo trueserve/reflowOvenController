@@ -608,7 +608,7 @@ void zeroCrossingIsr(void) {
   }
   Channels[ch].next = timerTicks + zxLoopDelay; // delay added to reach the next zx
 
-  ch = ((ch + 1) % CHANNELS); // next channel
+  ++ch %= CHANNELS; // next channel
 
 #ifdef WITH_CALIBRATION
   if (zxLoopCalibration.iterations < zxCalibrationLoops) {
@@ -619,13 +619,8 @@ void zeroCrossingIsr(void) {
 
 #ifdef FAKE_HW
  #if defined(__AVR_ATmega328P__)
-uint8_t fakehw_isr_freq = 0;
-
 ISR(TIMER2_COMPA_vect) {    
-  ++fakehw_isr_freq %= 2;
-  if (fakehw_isr_freq) zeroCrossingIsr();
-
-  TCNT2  = 0x00;  // reset counter
+  zeroCrossingIsr();
   // interrupt flag is cleared automatically by hardware
 }
  #endif
@@ -646,7 +641,7 @@ void timerIsr(void) { // ticks with 100µS
   if (Channels[CHANNEL_HEATER].next > lastTicks // FIXME: this looses ticks when overflowing
           && timerTicks > Channels[CHANNEL_HEATER].next)
   {
-    digitalWrite(PIN_HEATER, Channels[CHANNEL_HEATER].action ? HIGH : LOW);   
+    digitalWrite(PIN_HEATER, Channels[CHANNEL_HEATER].action ? HIGH : LOW);
     lastTicks = timerTicks;
   }
 
@@ -785,7 +780,7 @@ void updateProcessDisplay() {
   }
 
   // elapsed time
-  uint16_t elapsed = (zeroCrossTicks - startCycleZeroCrossTicks) / 100;
+  uint16_t elapsed = (zeroCrossTicks - startCycleZeroCrossTicks) / (LINE_FREQ * 2);
   tft.setCursor(125, y);
   alignRightPrefix(elapsed); 
   tft.print(elapsed);
@@ -1011,17 +1006,17 @@ void setup() {
   delay(100);
 #else
  #if defined(__AVR_ATmega328P__)
-  TCCR2B = 0x00;  // disable timer2
-  TCCR2A = 0x00;  // set as normal timer
-  TCNT2  = 0x00;  // reset counter
-  OCR2A  = ((LINE_FREQ * 2) / 15625);
+  TCCR2B = 0x00;         // disable timer2
+  TCCR2A = 0x02;         // set as CTC timer
+  TCNT2  = 0x00;         // reset counter
+  OCR2A  = (15625 / (LINE_FREQ * 2));
 
-  TIFR2  = 0x00;  // clear all interrupt flags
-  TIMSK2 = 0x02;  // enable overflow interrupt
+  TIFR2  = 0x00;         // clear all interrupt flags
+  TIMSK2 = _BV(OCIE2A);  // enable compare match interrupt
   
   TCCR2B = 0x07;  // enable, set prescaler /1024
  #elif defined(__AVR_ATmega32U4__)
-  Timer3.initialize(100 * FAKE_HW); // set speed multiplier by setting FAKE_HW to value
+  Timer3.initialize(MS_PER_SINE * FAKE_HW); // set speed multiplier by setting FAKE_HW to value
   Timer3.attachInterrupt(zeroCrossingIsr);
  #endif
 #endif
