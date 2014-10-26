@@ -850,7 +850,7 @@ void updateProcessDisplay() {
   tft.drawPixel(dx, dy, ST7735_RED);
 
   // bottom line
-  y = TFT_HEIGHT - 1;
+  y = TFT_HEIGHT - 9;
 
   // set values
   tft.setCursor(2, y);
