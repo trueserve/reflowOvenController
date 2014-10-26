@@ -19,7 +19,7 @@
 
 #define ENC_STEPS_PER_NOTCH 4   // steps per notch of the rotary encoder. to cal: set to 1, turn knob slowly, count
 
-#define TFT_ROTATE          1   // 0 or 2 = vertical, 1 or 3 = horizontal
+#define TFT_ROTATE          2   // 0 or 2 = vertical, 1 or 3 = horizontal
 
 //#define FAKE_HW             1
 //#define PIDTUNE             1   // autotune wouldn't fit in the 28k available on my arduino pro micro.
@@ -426,86 +426,10 @@ bool editNumericalValue(const Menu::Action_t action) {
 }
 
 
-// --RESET---------------------------------------------------------------------
-bool factoryReset(const Menu::Action_t action) {
-#ifndef PIDTUNE
-  if (action == Menu::actionDisplay) {
-    bool initial = currentState != Edit;
-    currentState = Edit;
-
-    if (initial) { // TODO: add eyecandy: colors or icons
-      tft.setTextColor(ST7735_BLACK, ST7735_WHITE);
-      tft.setCursor(TFT_LEFTCOL, 80);
-      tft.print("Click to confirm");
-      tft.setCursor(TFT_LEFTCOL, 90);
-      tft.print("Doubleclick to exit");
-    }
-  }
-
-  if (action == Menu::actionTrigger) { // do it
-    factoryReset();
-    tft.fillScreen(ST7735_WHITE);
-    Engine.navigate(Engine.getParent());
-    return false;
-  }
-
-  if (action == Menu::actionParent) {
-    if (currentState == Edit) { // leave edit mode only, returning to menu
-      currentState = Settings;
-      clearLastMenuItemRenderState();
-      return false;
-    }
-  }
-#endif // PIDTUNE
-}
-
 // --PROFILE PROTOTYPE---------------------------------------------------------
 void saveProfile(unsigned int targetProfile, bool quiet = false);
-
-
-// --PROFILE FN----------------------------------------------------------------
-bool saveLoadProfile(const Menu::Action_t action) {
-#ifndef PIDTUNE
-  bool isLoad = Engine.currentItem == &miLoadProfile;
-
-  if (action == Menu::actionDisplay) {
-    bool initial = currentState != Edit;
-    currentState = Edit;
-
-    tft.setTextColor(ST7735_BLACK, ST7735_WHITE);
-
-    if (initial) {
-      encAbsolute = activeProfileId;      
-      tft.setCursor(TFT_LEFTCOL, 90);
-      tft.print("Doubleclick to exit");
-    }
-
-    if (encAbsolute > maxProfiles) encAbsolute = maxProfiles;
-    if (encAbsolute <  0) encAbsolute =  0;
-
-    tft.setCursor(TFT_LEFTCOL, 80);
-    tft.print("Click to ");
-    tft.print((isLoad) ? "load " : "save ");
-    tft.setTextColor(ST7735_WHITE, ST7735_RED);
-    tft.print(encAbsolute);
-  }
-
-  if (action == Menu::actionTrigger) {
-    (isLoad) ? loadProfile(encAbsolute) : saveProfile(encAbsolute);
-    tft.fillScreen(ST7735_WHITE);
-    Engine.navigate(Engine.getParent());
-    return false;
-  }
-
-  if (action == Menu::actionParent) {    
-    if (currentState == Edit) { // leave edit mode only, returning to menu
-      currentState = Settings;
-      clearLastMenuItemRenderState();
-      return false;
-    }
-  }
-#endif // PIDTUNE
-}
+bool saveLoadProfile(const Menu::Action_t action);
+bool factoryReset(const Menu::Action_t action);
 
 
 // ----------------------------------------------------------------------------
@@ -664,9 +588,10 @@ struct {
 #endif
 
 
-// ----------------------------------------------------------------------------
-// Zero Crossing ISR; per ZX, process one channel per interrupt only
+// --ZX ISR--------------------------------------------------------------------
+// per ZX, process one channel per interrupt only
 // NB: use native port IO instead of digitalWrite for better performance
+// true: using digitalWrite again for better compatibility
 void zeroCrossingIsr(void) {
   static uint8_t ch = 0;
 
@@ -941,6 +866,80 @@ void updateProcessDisplay() {
 }
 
 
+// --RESET---------------------------------------------------------------------
+bool factoryReset(const Menu::Action_t action) {
+#ifndef PIDTUNE
+  if (action == Menu::actionDisplay) {
+    bool initial = currentState != Edit;
+    currentState = Edit;
+
+    if (initial) { // TODO: add eyecandy: colors or icons
+      tft.setTextColor(ST7735_BLACK, ST7735_WHITE);
+      tft.setCursor(TFT_LEFTCOL, 80);
+      tft.print("Doubleclick to RESET");
+      tft.setCursor(TFT_LEFTCOL, 90);
+      tft.print("Click to cancel");
+    }
+  }
+  
+  if (action == Menu::actionParent) { // do it
+    factoryReset();
+  }
+  
+  if (action == Menu::actionTrigger || action == Menu::actionParent) {
+    currentState = Settings;
+    tft.fillScreen(ST7735_WHITE);
+    Engine.currentItem = Engine.lastInvokedItem = &Menu::NullItem;     // prevent infinite loops
+    Engine.navigate(&miCycleStart);                                    // and just go back to the beginning
+    return false;  
+  }
+#endif // PIDTUNE
+}
+
+
+// --PROFILE LOAD/SAVE---------------------------------------------------------
+bool saveLoadProfile(const Menu::Action_t action) {
+#ifndef PIDTUNE
+  bool isLoad = Engine.currentItem == &miLoadProfile;
+
+  if (action == Menu::actionDisplay) {
+    bool initial = currentState != Edit;
+    currentState = Edit;
+
+    tft.setTextColor(ST7735_BLACK, ST7735_WHITE);
+
+    if (initial) {
+      encAbsolute = activeProfileId;      
+      tft.setCursor(TFT_LEFTCOL, 90);
+      tft.print("Doubleclick to exit");
+    }
+
+    if (encAbsolute > maxProfiles) encAbsolute = maxProfiles;
+    if (encAbsolute <  0) encAbsolute =  0;
+
+    tft.setCursor(TFT_LEFTCOL, 80);
+    tft.print("Click to ");
+    tft.print((isLoad) ? "load " : "save ");
+    tft.setTextColor(ST7735_WHITE, ST7735_RED);
+    tft.print(encAbsolute);
+  }
+
+  if (action == Menu::actionTrigger) {
+    (isLoad) ? loadProfile(encAbsolute) : saveProfile(encAbsolute);
+    tft.fillScreen(ST7735_WHITE);
+    Engine.navigate(Engine.getParent());
+    return false;
+  }
+
+  if (action == Menu::actionParent) {
+    currentState = Settings;
+    clearLastMenuItemRenderState();
+    return false;
+  }
+#endif // PIDTUNE
+}
+
+
 // --INIT----------------------------------------------------------------------
 void setup() {
   // configure SSR outputs to initial state
@@ -1119,7 +1118,7 @@ void loop(void)
   // handle button
   //
   switch (Encoder.getButton()) {
-    case ClickEncoder::Clicked:
+    case ClickEncoder::Clicked: {
       if (currentState == Complete) { // at end of cycle; reset at click
         menuExit(Menu::actionDisplay); // reset to initial state
         Engine.navigate(&miCycleStart);
@@ -1134,15 +1133,15 @@ void loop(void)
         currentState = CoolDown;
       }
       break;
+    }
 
-    case ClickEncoder::DoubleClicked:
+    case ClickEncoder::DoubleClicked: {
       if (currentState < UIMenuEnd) {
-        if (Engine.getParent() != &miExit) {
-          Engine.navigate(Engine.getParent());
-          menuUpdateRequest = true;
-        }
+        Engine.navigate(Engine.getParent());
+        menuUpdateRequest = true;
       }
       break;
+    }
   }
 
   // --------------------------------------------------------------------------
