@@ -38,3 +38,7 @@ eagle.epf
 
 *.eps
 
+*.gt*
+*.gb*
+*.gko
+*.gml
