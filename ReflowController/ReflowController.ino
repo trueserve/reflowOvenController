@@ -723,9 +723,11 @@ uint16_t pxPerC;
 uint16_t xOffset; // used for wraparound on x axis
 
 void updateProcessDisplay() {
-  const uint8_t h =  86;
-  const uint8_t w = 160;
-  const uint8_t yOffset =  30; // space not available for graph  
+  const uint8_t h       = 86;
+  const uint8_t w       = TFT_WIDTH;
+  const uint8_t yOffset = TFT_HEIGHT - 98; // space not available for graph
+
+  static uint8_t lastState = 0;
 
   uint16_t dx, dy;
   uint8_t y = 2;
@@ -765,11 +767,11 @@ void updateProcessDisplay() {
     tmp = w / tmp * 10.0; 
     pxPerS = (uint16_t)tmp;
 
-    // 50°C grid
+    // 50°C grid horizontal
     int16_t t = (uint16_t)(activeProfile.peakTemp * 1.10);
     for (uint16_t tg = 0; tg < t; tg += 50) {
       uint16_t l = h - (tg * pxPerC / 100) + yOffset;
-      tft.drawFastHLine(0, l, 160, tft.Color565(0xe0, 0xe0, 0xe0));
+      tft.drawFastHLine(0, l, TFT_WIDTH, tft.Color565(0xe0, 0xe0, 0xe0));
     }
 #ifdef GRAPH_VERBOSE
     Serial.print("Calc pxPerC/S: ");
@@ -781,47 +783,85 @@ void updateProcessDisplay() {
 
   // elapsed time
   uint16_t elapsed = (zeroCrossTicks - startCycleZeroCrossTicks) / (LINE_FREQ * 2);
-  tft.setCursor(125, y);
+  tft.setCursor(TFT_WIDTH - 24, y);
   alignRightPrefix(elapsed); 
   tft.print(elapsed);
   tft.print("s");
 
   y += menuItemHeight + 2;
 
+#if (TFT_ROTATE % 2 == 0)
+  ftoa(buf, A.temperature, 1);
+  tft.setCursor((TFT_WIDTH >> 1) - (6 * strlen(buf)) - 12 - 24, y + 2);
+#else
   tft.setCursor(2, y);
+#endif
+
   tft.setTextColor(ST7735_BLACK, ST7735_WHITE);
 
   // temperature
   tft.setTextSize(2);
+
+#if (TFT_ROTATE % 2 == 0)
+  tft.print("  ");  // clear any preceding crap
+#else
   alignRightPrefix((int)A.temperature);
+#endif
+
   displayThermocoupleData(&A);
+
+#if (TFT_ROTATE % 2 == 0)
+  tft.print("  ");  // clear any post crap
+#endif
+
   tft.setTextSize(1);
 
 #ifndef PIDTUNE
   // current state
   y -= 2;
-  tft.setCursor(95, y);
+#if (TFT_ROTATE % 2 == 0)
+  y += 24;
+  #define casePrintState(state) case state: {                        \
+          tft.setCursor((TFT_WIDTH >> 1) - (3 * strlen(#state)), y);  \
+          tft.print(#state); break; }
+#else
+  tft.setCursor(94, y);
+  #define casePrintState(state) case state: { tft.print(#state); break; }
+#endif
+  
   tft.setTextColor(ST7735_BLACK, ST7735_GREEN);
   
-  switch (currentState) {
-    #define casePrintState(state) case state: tft.print(#state); break;
-    casePrintState(RampToSoak);
-    casePrintState(Soak);
-    casePrintState(RampUp);
-    casePrintState(Peak);
-    casePrintState(RampDown);
-    casePrintState(CoolDown);
-    casePrintState(Complete);
-    default: tft.print((uint8_t)currentState); break;
+  if (lastState != currentState) {
+    lastState = currentState;
+#if (TFT_ROTATE % 2 == 0)
+    tft.fillRect(20, y, TFT_WIDTH - 40, 8, ST7735_GREEN);
+#else
+    tft.fillRect(94, y, TFT_WIDTH - 88, 8, ST7735_GREEN);
+#endif  
+    switch (currentState) {
+      casePrintState(RampToSoak);
+      casePrintState(Soak);
+      casePrintState(RampUp);
+      casePrintState(Peak);
+      casePrintState(RampDown);
+      casePrintState(CoolDown);
+      casePrintState(Complete);
+      default: tft.print((uint8_t)currentState); break;
+    }
   }
-  tft.print("        "); // lazy: fill up space
 
   tft.setTextColor(ST7735_BLACK, ST7735_WHITE);
 #endif
 
   // set point
   y += 10;
-  tft.setCursor(95, y);
+
+#if (TFT_ROTATE % 2 == 0)
+  tft.setCursor((TFT_WIDTH >> 1) - (3 * 10), y);
+#else
+  tft.setCursor(94, y);
+#endif
+
   tft.print("Sp:"); 
   alignRightPrefix((int)Setpoint); 
   printDouble(Setpoint);
