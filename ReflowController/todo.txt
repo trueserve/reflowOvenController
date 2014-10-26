@@ -3,6 +3,7 @@ important
 - cycle display is not correct yet for vertical mode
 - make any direct pin access code portable
 - fix bounds limits on settings (fan at -300%? lol)
+- Show which profile is loaded, and load selected profile by default
 
 low priority
 - fix text leaving crap behind when redrawn, stale text after leaving menus
@@ -12,6 +13,7 @@ low priority
              what to perform: go high, go low, pulse/hold for X seconds, etc
              data to perform: time to hold, delay to go high/low, etc
 - reduce size to fit on a micro again
+- Log (and show) completed and canceled run count
 
 optional
 - look into adding scrollbar, and maybe a scroll area border

@@ -352,8 +352,13 @@ bool editNumericalValue(const Menu::Action_t action) {
 
     if (initial) {
       tft.setTextColor(ST7735_BLACK, ST7735_WHITE);
+
       tft.setCursor(TFT_LEFTCOL, 80);
-      tft.print("Edit & click to save.");
+      tft.print("Rotate to edit");
+
+      tft.setCursor(TFT_LEFTCOL, 90);
+      tft.print("Click to save");
+      
       Encoder.setAccelerationEnabled(true);
     }
 
