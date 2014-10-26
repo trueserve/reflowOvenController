@@ -11,8 +11,10 @@ low priority
     example: when to perform: after soak, after ramp up, etc:
              what to perform: go high, go low, pulse/hold for X seconds, etc
              data to perform: time to hold, delay to go high/low, etc
+- reduce size to fit on a micro again
 
 optional
 - look into adding scrollbar, and maybe a scroll area border
 - show stats/graph/divergence/something of previous run in lower area OR extend menus to fit LCD
 - add temperature calibration / offset (is this necessary?)
+- wonder why I am fighting with such a small platform and limitations of arduino for this
