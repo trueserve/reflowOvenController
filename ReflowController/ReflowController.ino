@@ -95,7 +95,7 @@ const char *ver = "3.1_tr01";
 #if defined(__AVR_ATmega32U4__)
  #define INT_ZX      1 // interrupt for ZX detector (pro micro)
 #elif defined(__AVR_ATmega328P__)
- #define INT_ZX      0 // interrupt for ZX detector (pro mini/nano)
+ #define INT_ZX      0 // interrupt for ZX detector (pro mini/nano 3.0)
 #endif
                        // Leonardo == Pro Micro:
                        //   Pin: 3 2 0 1 7
@@ -344,7 +344,7 @@ bool getItemValueLabel(const Menu::Item_t *mi, char *label) {
   return dValue || iValue;
 }
 
-bool editNumericalValue(const Menu::Action_t action) { 
+bool editNumericalValue(const Menu::Action_t action) {
   if (action == Menu::actionDisplay) {
     bool initial = currentState != Edit;
     currentState = Edit;
@@ -402,6 +402,7 @@ bool editNumericalValue(const Menu::Action_t action) {
 
     getItemValueLabel(Engine.currentItem, buf);
     tft.print(buf);
+    tft.print("   ");
     tft.setTextColor(ST7735_BLACK, ST7735_WHITE);
   }
 
