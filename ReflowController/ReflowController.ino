@@ -174,8 +174,9 @@ int16_t encMovement;
 int16_t encAbsolute;
 int16_t encLastAbsolute = -1;
 
-const uint8_t menuItemsVisible = 5;
-const uint8_t menuItemHeight = 12;
+#define MENU_ITEMS_VISIBLE   5
+#define MENU_ITEM_HEIGHT     12
+
 bool menuUpdateRequest = true;
 bool initialProcessDisplay = false;
 
@@ -213,15 +214,17 @@ typedef struct {
   bool current;
 } LastItemState_t;
 
-LastItemState_t currentlyRenderedItems[menuItemsVisible];
+LastItemState_t currentlyRenderedItems[MENU_ITEMS_VISIBLE];
 
 void clearLastMenuItemRenderState() {
-  // memset(&currentlyRenderedItems, 0xff, sizeof(LastItemState_t) * menuItemsVisible);
-  for (uint8_t i = 0; i < menuItemsVisible; i++) {
+  // memset(&currentlyRenderedItems, 0xff, sizeof(LastItemState_t) * MENU_ITEMS_VISIBLE);
+  for (uint8_t i = 0; i < MENU_ITEMS_VISIBLE; i++) {
     currentlyRenderedItems[i].mi = NULL;
     currentlyRenderedItems[i].pos = 0xff;
     currentlyRenderedItems[i].current = false;
   }
+  
+  
 }
 
 
@@ -361,12 +364,12 @@ bool editNumericalValue(const Menu::Action_t action) {
       Encoder.setAccelerationEnabled(true);
     }
 
-    for (uint8_t i = 0; i < menuItemsVisible; i++) {
+    for (uint8_t i = 0; i < MENU_ITEMS_VISIBLE; i++) {
       if (currentlyRenderedItems[i].mi == Engine.currentItem) {
-        uint8_t y = currentlyRenderedItems[i].pos * menuItemHeight + 2;
+        uint8_t y = currentlyRenderedItems[i].pos * MENU_ITEM_HEIGHT + 2;
 
         if (initial) {
-          tft.fillRect(TFT_LEFTCOL + 59, y - 1, (TFT_WIDTH - (TFT_LEFTCOL + 59) - TFT_LEFTCOL) + 1, menuItemHeight - 2, ST7735_RED);
+          tft.fillRect(TFT_LEFTCOL + 59, y - 1, (TFT_WIDTH - (TFT_LEFTCOL + 59) - TFT_LEFTCOL) + 1, MENU_ITEM_HEIGHT - 2, ST7735_RED);
         }
 
         tft.setCursor(TFT_LEFTCOL + 60, y);
@@ -410,7 +413,6 @@ bool editNumericalValue(const Menu::Action_t action) {
     clearLastMenuItemRenderState();
     menuUpdateRequest = true;
     Engine.lastInvokedItem = &Menu::NullItem;
-
 
     if (currentState == Edit) { // leave edit mode, return to menu
       if (isPidSetting(Engine.currentItem)) {
@@ -462,7 +464,7 @@ bool cycleStart(const Menu::Action_t action) {
 void renderMenuItem(const Menu::Item_t *mi, uint8_t pos) {
   //ScopedTimer tm("  render menuitem");
   bool isCurrent = Engine.currentItem == mi;
-  uint8_t y = pos * menuItemHeight + 2;
+  uint8_t y = pos * MENU_ITEM_HEIGHT + 2;
 
   if (currentlyRenderedItems[pos].mi == mi 
       && currentlyRenderedItems[pos].pos == pos 
@@ -472,7 +474,7 @@ void renderMenuItem(const Menu::Item_t *mi, uint8_t pos) {
   }
 
   // menu cursor bar
-  tft.fillRect(TFT_LEFTCOL - 2, y - 2, TFT_WIDTH - (TFT_LEFTCOL << 1) + 4, menuItemHeight, isCurrent ? ST7735_BLUE : ST7735_WHITE);
+  tft.fillRect(TFT_LEFTCOL - 2, y - 2, TFT_WIDTH - (TFT_LEFTCOL << 1) + 4, MENU_ITEM_HEIGHT, isCurrent ? ST7735_BLUE : ST7735_WHITE);
   if (isCurrent) tft.setTextColor(ST7735_WHITE, ST7735_BLUE);
   else tft.setTextColor(ST7735_BLACK, ST7735_WHITE);
 
@@ -752,7 +754,7 @@ void updateProcessDisplay() {
     initialProcessDisplay = true;
 
     tft.fillScreen(ST7735_WHITE);
-    tft.fillRect(0, 0, TFT_WIDTH, menuItemHeight, ST7735_BLUE);
+    tft.fillRect(0, 0, TFT_WIDTH, MENU_ITEM_HEIGHT, ST7735_BLUE);
     tft.setCursor(2, y);
 #ifndef PIDTUNE
     tft.print(FS("Profile "));
@@ -800,7 +802,7 @@ void updateProcessDisplay() {
   tft.print(elapsed);
   tft.print("s");
 
-  y += menuItemHeight + 2;
+  y += MENU_ITEM_HEIGHT + 2;
 
 #if (LCD_ROTATE % 2 == 0)
   ftoa(buf, A.temperature, 1);
@@ -1237,7 +1239,7 @@ void loop(void)
     if (currentState < UIMenuEnd && !encMovement && currentState != Edit && previousState != Edit) { // clear menu on child/parent navigation
       tft.fillScreen(ST7735_WHITE);
     }  
-    Engine.render(renderMenuItem, menuItemsVisible);
+    Engine.render(renderMenuItem, MENU_ITEMS_VISIBLE);
   }
 
   // --------------------------------------------------------------------------
