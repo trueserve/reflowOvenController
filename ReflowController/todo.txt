@@ -1,13 +1,15 @@
 important
 [x] doubleclick to exit load profile screen doesn't work
-[ ] cycle display is not correct yet for vertical mode
+[x] cycle display is not correct yet for vertical mode
 [x] make any direct pin access code portable
 [ ] fix bounds limits on settings (fan at -300%? lol)
 [ ] Show which profile is loaded, and load selected profile by default
-[ ] Remove reliance on TimerThree in fake mode as mini and nano do not have timer3
+[x] Remove reliance on TimerThree in fake mode as mini and nano do not have timer3
 
 low priority
-[ ] fix text leaving crap behind when redrawn, stale text after canceling load/save profile
+[x] fix text leaving crap behind when redrawn, stale text after canceling load/save profile
+[x] fix editing numeric values leaves crap behind if number of characters changes
+[ ] when in submenus, show text indicating how to exit the submenu
 [ ] be more descriptive on how to exit menus (nothing is shown right now, you just have to know)
 [ ] implement action selection on spare D5 and maybe D10 pin
     example: when to perform: after soak, after ramp up, etc:
@@ -22,4 +24,4 @@ optional
 [ ] look into adding scrollbar, and maybe a scroll area border
 [ ] show stats/graph/divergence/something of previous run in lower area OR extend menus to fit LCD
 [ ] add temperature calibration / offset (is this even necessary?)
-[/] wonder why I am fighting with such a small platform and limitations of arduino for this
+[?] wonder why I am fighting with such a small platform and limitations of arduino for this

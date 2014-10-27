@@ -224,7 +224,9 @@ void clearLastMenuItemRenderState() {
     currentlyRenderedItems[i].current = false;
   }
   
-  
+  // clear the area below the menu
+  // TODO: find out why ADDING this line saves 82 bytes of flash (!!)
+  tft.fillRect(0, (MENU_ITEMS_VISIBLE * MENU_ITEM_HEIGHT) + 2, TFT_WIDTH, TFT_HEIGHT, ST7735_WHITE);
 }
 
 
