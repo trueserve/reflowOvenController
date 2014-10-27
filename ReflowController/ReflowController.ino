@@ -9,11 +9,12 @@
 #define BOARD_TYPE          1   // 0 = kp's design, 1 = true's design
 #define LINE_FREQ           60  // 50 or 60 supported
 
-#define INITR_TABTYPE       INITR_BLACKTAB  // lcd type, usually INITR_RED/GREEN/BLACKTAB
-
 #define ENC_STEPS_PER_NOTCH 4   // steps per notch of the rotary encoder. to cal: set to 1, turn knob slowly, count
 
-#define TFT_ROTATE          2   // 0 or 2 = vertical, 1 or 3 = horizontal
+#define LCD_ROTATE          2   // 0 or 2 = vertical, 1 or 3 = horizontal
+#define LCD_TABTYPE         INITR_BLACKTAB  // lcd type, usually INITR_RED/GREEN/BLACKTAB
+
+#define IDLE_SAFE_TEMP      50  // temp in degC that the oven is considered safe/done cooling
 
 //#define FAKE_HW             1
 //#define PIDTUNE             1   // autotune wouldn't fit in the 28k available on my arduino pro micro.
@@ -25,14 +26,23 @@
 
 // --INCL----------------------------------------------------------------------
 #include <avr/eeprom.h>
+#include <avr/pgmspace.h>
+#include <avr/interrupt.h>
+
+#include <WString.h>
+
 #include <EEPROM.h>
-#include <PID_v1.h>
+#include <SPI.h>
+
+#include <Menu.h>
+
+#include <ClickEncoder.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7735.h>
-#include <SPI.h>
-#include <Menu.h>
+
+#include <PID_v1.h>
 #include <TimerOne.h>
-#include <ClickEncoder.h>
+
 
 #ifdef FAKE_HW
  #ifdef __AVR_ATmega32U4__
@@ -55,7 +65,7 @@ const char *ver = "3.1_tr01";
   #define DEFAULT_LOOP_DELAY  89
 #else
   #define MS_PER_SINE         83.333  // for 60Hz mains, 83.333ms per sinusoid
-  #define DEFAULT_LOOP_DELAY  74
+  #define DEFAULT_LOOP_DELAY  74      // this has NOT been verified
 #endif
 
 
@@ -128,18 +138,16 @@ typedef struct profileValues_s {
   uint8_t checksum;
 } Profile_t;
 
+#define MAX_PROFILES               30
 Profile_t activeProfile; // the one and only instance
 int activeProfileId = 0;
 
-int idleTemp = 50; // the temperature at which to consider the oven safe to leave to cool naturally
 int fanAssistSpeed = 33; // default fan speed
 
-const uint8_t maxProfiles = 30;
-
 // EEPROM offsets
-const uint16_t offsetFanSpeed   = maxProfiles * sizeof(Profile_t) + 1; // one byte
-const uint16_t offsetProfileNum = maxProfiles * sizeof(Profile_t) + 2; // one byte
-const uint16_t offsetPidConfig  = maxProfiles * sizeof(Profile_t) + 3; // sizeof(PID_t)
+const uint16_t offsetFanSpeed   = MAX_PROFILES * sizeof(Profile_t) + 1; // one byte
+const uint16_t offsetProfileNum = MAX_PROFILES * sizeof(Profile_t) + 2; // one byte
+const uint16_t offsetPidConfig  = MAX_PROFILES * sizeof(Profile_t) + 3; // sizeof(PID_t)
 
 
 // --UI------------------------------------------------------------------------
@@ -148,7 +156,7 @@ const uint16_t offsetPidConfig  = maxProfiles * sizeof(Profile_t) + 3; // sizeof
 
 Adafruit_ST7735 tft = Adafruit_ST7735(LCD_CS, LCD_DC, LCD_RST);
 
-#if (TFT_ROTATE == 1 || TFT_ROTATE == 3)
+#if (LCD_ROTATE == 1 || LCD_ROTATE == 3)
  #define TFT_LEFTCOL        10
  #define TFT_WIDTH          160
  #define TFT_HEIGHT         128
@@ -256,6 +264,9 @@ unsigned int aTuneLookBack = 30;
 
 
 // --HELPERS-------------------------------------------------------------------
+#define FS(x)      (x)     // define as F(x) to store strings in flash.
+                           // at this time this costs 70bytes, and we don't need the SRAM
+
 void printDouble(double val, uint8_t precision = 1) {
   ftoa(buf, val, precision);
   tft.print(buf);
@@ -342,10 +353,10 @@ bool editNumericalValue(const Menu::Action_t action) {
       tft.setTextColor(ST7735_BLACK, ST7735_WHITE);
 
       tft.setCursor(TFT_LEFTCOL, 80);
-      tft.print("Rotate to edit");
+      tft.print(FS("Rotate to edit"));
 
       tft.setCursor(TFT_LEFTCOL, 90);
-      tft.print("Click to save");
+      tft.print(FS("Click to save"));
       
       Encoder.setAccelerationEnabled(true);
     }
@@ -474,7 +485,7 @@ void renderMenuItem(const Menu::Item_t *mi, uint8_t pos) {
 
   // mark items that have children
   if (Engine.getChild(mi) != &Menu::NullItem) {
-    tft.print(" \x10   "); // 0x10 -> filled right arrow
+    tft.print(FS(" \x10   ")); // 0x10 -> filled right arrow
   }
 
   currentlyRenderedItems[pos].mi = mi;
@@ -670,31 +681,31 @@ void abortWithError(int error) {
   tft.setCursor(TFT_LEFTCOL, 10);
   
   if (error < 9) {
-    tft.println("Thermocouple Error");
+    tft.print(FS("Thermocouple Error"));
     tft.setCursor(TFT_LEFTCOL, 30);
     switch (error) {
       case 0b001:
-        tft.println("Open Circuit");
+        tft.print(FS("Open Circuit"));
         break;
       case 0b010:
-        tft.println("GND Short");
+        tft.print(F("GND Short"));
         break;
       case 0b100:
-        tft.println("VCC Short");
+        tft.print(FS("VCC Short"));
         break;
     }
     tft.setCursor(TFT_LEFTCOL, 60);
-    tft.println("Power off,");
+    tft.print(FS("Power off,"));
     tft.setCursor(TFT_LEFTCOL, 75);
-    tft.println("check connections");
+    tft.print(FS("check connections"));
   }
   else {
-    tft.println("Temperature"); 
+    tft.print(FS("Temperature")); 
     tft.setCursor(TFT_LEFTCOL, 30);
-    tft.println("following error");
+    tft.print(FS("following error"));
     tft.setCursor(TFT_LEFTCOL, 45);
-    tft.print("during ");
-    tft.println((error == 10) ? "heating" : "cooling");
+    tft.print(FS("during "));
+    tft.print((error == 10) ? F("heating") : F("cooling"));
   }
 
   while (1) { //  stop
@@ -743,10 +754,10 @@ void updateProcessDisplay() {
     tft.fillRect(0, 0, TFT_WIDTH, menuItemHeight, ST7735_BLUE);
     tft.setCursor(2, y);
 #ifndef PIDTUNE
-    tft.print("Profile ");
+    tft.print(FS("Profile "));
     tft.print(activeProfileId);
 #else
-    tft.print("Tuning ");
+    tft.print(FS("Tuning "));
 #endif
 
     tmp = h / (activeProfile.peakTemp * 1.10) * 100.0;
@@ -790,7 +801,7 @@ void updateProcessDisplay() {
 
   y += menuItemHeight + 2;
 
-#if (TFT_ROTATE % 2 == 0)
+#if (LCD_ROTATE % 2 == 0)
   ftoa(buf, A.temperature, 1);
   tft.setCursor((TFT_WIDTH >> 1) - (6 * strlen(buf)) - 12 - 24, y + 2);
 #else
@@ -802,7 +813,7 @@ void updateProcessDisplay() {
   // temperature
   tft.setTextSize(2);
 
-#if (TFT_ROTATE % 2 == 0)
+#if (LCD_ROTATE % 2 == 0)
   tft.print("  ");  // clear any preceding crap
 #else
   alignRightPrefix((int)A.temperature);
@@ -810,7 +821,7 @@ void updateProcessDisplay() {
 
   displayThermocoupleData(&A);
 
-#if (TFT_ROTATE % 2 == 0)
+#if (LCD_ROTATE % 2 == 0)
   tft.print("  ");  // clear any post crap
 #endif
 
@@ -819,7 +830,7 @@ void updateProcessDisplay() {
 #ifndef PIDTUNE
   // current state
   y -= 2;
-#if (TFT_ROTATE % 2 == 0)
+#if (LCD_ROTATE % 2 == 0)
   y += 24;
   #define casePrintState(state) case state: {                        \
           tft.setCursor((TFT_WIDTH >> 1) - (3 * strlen(#state)), y);  \
@@ -833,7 +844,7 @@ void updateProcessDisplay() {
   
   if (lastState != currentState) {
     lastState = currentState;
-#if (TFT_ROTATE % 2 == 0)
+#if (LCD_ROTATE % 2 == 0)
     tft.fillRect(20, y, TFT_WIDTH - 40, 8, ST7735_GREEN);
 #else
     tft.fillRect(94, y, TFT_WIDTH - 88, 8, ST7735_GREEN);
@@ -856,7 +867,7 @@ void updateProcessDisplay() {
   // set point
   y += 10;
 
-#if (TFT_ROTATE % 2 == 0)
+#if (LCD_ROTATE % 2 == 0)
   tft.setCursor((TFT_WIDTH >> 1) - (3 * 10), y);
 #else
   tft.setCursor(94, y);
@@ -958,7 +969,7 @@ bool saveLoadProfile(const Menu::Action_t action) {
       tft.print("Doubleclick to exit");
     }
 
-    if (encAbsolute > maxProfiles) encAbsolute = maxProfiles;
+    if (encAbsolute > MAX_PROFILES) encAbsolute = MAX_PROFILES;
     if (encAbsolute <  0) encAbsolute =  0;
 
     tft.setCursor(TFT_LEFTCOL, 80);
@@ -990,10 +1001,10 @@ void setup() {
   setupRelayPins();
   
   // start up LCD
-  tft.initR(INITR_TABTYPE);
+  tft.initR(LCD_TABTYPE);
   tft.setTextWrap(false);
   tft.setTextSize(1);
-  tft.setRotation(TFT_ROTATE);
+  tft.setRotation(LCD_ROTATE);
 
   if (firstRun()) {
     factoryReset();
@@ -1010,23 +1021,24 @@ void setup() {
   // splash screen
   tft.setTextSize(2);
   tft.setCursor((TFT_WIDTH >> 1) - 24, 8);
-  tft.print("Open");
+  tft.print(FS("Open"));
   tft.setCursor((TFT_WIDTH >> 1) - 36, 26); // 10
-  tft.print("Reflow");
+  tft.print(FS("Reflow"));
   tft.setCursor((TFT_WIDTH >> 1) - 60, 44); // 24
-  tft.print("Controller");
+  tft.print(FS("Controller"));
+
   tft.setTextSize(1);
   tft.setCursor((TFT_WIDTH >> 1) - ((strlen(ver) * 3) + 24), 66); // 52
-  tft.print("version "); tft.print(ver);
+  tft.print(FS("version ")), tft.print(ver);
 #ifdef FAKE_HW
-  tft.print("-fake");
+  tft.print(FS("-fake"));
 #endif
   tft.setCursor((TFT_WIDTH >> 1) - 48, TFT_HEIGHT - 41);
-  tft.print("modified by true");
+  tft.print(FS("modified by true"));
   tft.setCursor((TFT_WIDTH >> 1) - 54, TFT_HEIGHT - 26);
-  tft.print("Copyright (c) 2014");
+  tft.print(FS("Copyright (c) 2014"));
   tft.setCursor((TFT_WIDTH >> 1) - 48, TFT_HEIGHT - 16);
-  tft.print("karl@pitrich.com");
+  tft.print(FS("karl@pitrich.com"));
   delay(950);
 #endif
 
@@ -1086,7 +1098,7 @@ void setup() {
 
 #ifdef WITH_CALIBRATION
   tft.setCursor(7, 99);  
-  tft.print("Calibrating... ");
+  tft.print(FS("Calibrating... "));
   delay(400);
 
   // FIXME: does not work reliably
@@ -1366,7 +1378,7 @@ void loop(void)
 
         updateRampSetpoint(true);
 
-        if (Setpoint <= idleTemp) {
+        if (Setpoint <= IDLE_SAFE_TEMP) {
           currentState = CoolDown;
         }
         break;
@@ -1376,10 +1388,10 @@ void loop(void)
           stateChanged = false;
           PID.SetControllerDirection(REVERSE);
           PID.SetTunings(fanPID.Kp, fanPID.Ki, fanPID.Kd);
-          Setpoint = idleTemp;
+          Setpoint = IDLE_SAFE_TEMP;
         }
 
-        if (Input < (idleTemp + 5)) {
+        if (Input < (IDLE_SAFE_TEMP + 5)) {
           currentState = Complete;
           PID.SetMode(MANUAL);
           Output = 0;
@@ -1404,11 +1416,11 @@ void loop(void)
             savePID();
 
             tft.setCursor(40, 40);
-            tft.print("Kp: "); tft.print((uint32_t)(heaterPID.Kp * 100));
+            tft.print(FS("Kp: ")); tft.print((uint32_t)(heaterPID.Kp * 100));
             tft.setCursor(40, 52);
-            tft.print("Ki: "); tft.print((uint32_t)(heaterPID.Ki * 100));
+            tft.print(FS("Ki: ")); tft.print((uint32_t)(heaterPID.Ki * 100));
             tft.setCursor(40, 64);
-            tft.print("Kd: "); tft.print((uint32_t)(heaterPID.Kd * 100));
+            tft.print(FS("Kd: ")); tft.print((uint32_t)(heaterPID.Kd * 100));
           }
         }
         break;
@@ -1457,8 +1469,8 @@ void memoryFeedbackScreen(uint8_t profileId, bool loading) {
   tft.fillScreen(ST7735_GREEN);
   tft.setTextColor(ST7735_BLACK);
   tft.setCursor(TFT_LEFTCOL, 50);
-  tft.print(loading ? "Loading" : "Saving");
-  tft.print(" profile ");
+  tft.print(loading ? FS("Loading") : FS("Saving"));
+  tft.print(FS(" profile "));
   tft.print(profileId);  
 }
 
@@ -1484,9 +1496,9 @@ void loadProfile(unsigned int targetProfile) {
 #if 0
   if (!ok) {
     lcd.setCursor(0, 2);
-    lcd.print("Checksum error!");
+    lcd.print(FS("Checksum error!"));
     lcd.setCursor(0, 3);
-    lcd.print("Review profile.");
+    lcd.print(FS("Review profile."));
     delay(2500);
   }
 #endif
@@ -1569,10 +1581,10 @@ void factoryReset() {
   tft.fillScreen(ST7735_RED);
   tft.setTextColor(ST7735_WHITE);
   tft.setCursor(TFT_LEFTCOL, 50);
-  tft.print("Resetting...");
+  tft.print(FS("Resetting..."));
 
   // then save the same profile settings into all slots
-  for (uint8_t i = 0; i < maxProfiles; i++) {
+  for (uint8_t i = 0; i < MAX_PROFILES; i++) {
     saveParameters(i);
   }
 
