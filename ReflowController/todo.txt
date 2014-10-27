@@ -9,8 +9,7 @@ important
 low priority
 [x] fix text leaving crap behind when redrawn, stale text after canceling load/save profile
 [x] fix editing numeric values leaves crap behind if number of characters changes
-[ ] when in submenus, show text indicating how to exit the submenu
-[ ] be more descriptive on how to exit menus (nothing is shown right now, you just have to know)
+[x] be more descriptive on how to exit menus (nothing is shown right now, you just have to know)
 [ ] implement action selection on spare D5 and maybe D10 pin
     example: when to perform: after soak, after ramp up, etc:
              what to perform: go high, go low, pulse/hold for X seconds, etc
