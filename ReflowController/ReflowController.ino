@@ -357,8 +357,9 @@ bool editNumericalValue(const Menu::Action_t action) {
     if (initial) {
       tft.setTextColor(ST7735_BLACK, ST7735_WHITE);
 
+      // need spaces here to overwrite potential stale text
       tft.setCursor(TFT_LEFTCOL, 80);
-      tft.print(FS("Rotate to edit"));
+      tft.print(FS("Rotate to edit      "));
 
       tft.setCursor(TFT_LEFTCOL, 90);
       tft.print(FS("Click to save"));
@@ -937,7 +938,7 @@ bool factoryReset(const Menu::Action_t action) {
       tft.setTextColor(ST7735_BLACK, ST7735_WHITE);
       tft.setCursor(TFT_LEFTCOL, 80);
       tft.print("Doubleclick to RESET");
-      tft.setCursor(TFT_LEFTCOL, 100);
+      tft.setCursor(TFT_LEFTCOL, 90);
       tft.print("Click to cancel");
     }
   }
@@ -970,7 +971,7 @@ bool saveLoadProfile(const Menu::Action_t action) {
 
     if (initial) {
       encAbsolute = activeProfileId;      
-      tft.setCursor(TFT_LEFTCOL, 100);
+      tft.setCursor(TFT_LEFTCOL, 90);
       tft.print("Doubleclick to exit");
     }
 
@@ -1247,7 +1248,7 @@ void loop(void)
     // are we navigating in a submenu? if so, print information on how to exit the submenu
     if (currentState == Settings && !(Engine.getParent() == &miExit || Engine.getParent() == &miEditable)) {
       // we must be in a submenu...
-      tft.setCursor(TFT_LEFTCOL, 100);
+      tft.setCursor(TFT_LEFTCOL, 80);
       tft.print("Doubleclick to Exit");
     }  
   }
