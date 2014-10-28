@@ -156,11 +156,11 @@ const uint16_t offsetPidConfig  = MAX_PROFILES * sizeof(Profile_t) + 3; // sizeo
 
 Adafruit_ST7735 tft = Adafruit_ST7735(LCD_CS, LCD_DC, LCD_RST);
 
-#if (LCD_ROTATE == 1 || LCD_ROTATE == 3)
+#if (LCD_ROTATE % 2 == 1)   // wide view
  #define TFT_LEFTCOL        10
  #define TFT_WIDTH          160
  #define TFT_HEIGHT         128
-#else
+#else                       // narrow view
  #define TFT_LEFTCOL        4
  #define TFT_WIDTH          128
  #define TFT_HEIGHT         160
@@ -1032,7 +1032,7 @@ void setup() {
   printCentered(buf, 66);
   
 
-  printCentered(FS("modified by true"), TFT_HEIGHT - 41);
+  printCentered(FS("updates by true"), TFT_HEIGHT - 41);
   printCentered(FS("Copyright (c) 2014"), TFT_HEIGHT - 26);
   printCentered(FS("karl@pitrich.com"), TFT_HEIGHT - 16);
   delay(950);
