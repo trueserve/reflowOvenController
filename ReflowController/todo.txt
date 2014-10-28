@@ -18,9 +18,11 @@ low priority
 [ ] reduce size to fit on a micro again
 [ ] Log (and show) completed and canceled run count with the oven, overall elapsed time run (aging?)
 [ ] Rework ST7735 module - KP's is bigger than Adafruit's when compiled?
+    update 20141027: it's because he has inlined everything.
 
 optional
 [ ] look into adding scrollbar, and maybe a scroll area border
 [ ] show stats/graph/divergence/something of previous run in lower area OR extend menus to fit LCD
 [ ] add temperature calibration / offset (is this even necessary?)
+[ ] find out how kp gets his code to even fit in a pro micro (it doesn't for me and he did not answer)
 [?] wonder why I am fighting with such a small platform and limitations of arduino for this
