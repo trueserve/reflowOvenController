@@ -29,10 +29,8 @@
 #include <avr/pgmspace.h>
 #include <avr/interrupt.h>
 
-#include <WString.h>
-
-#include <EEPROM.h>
 #include <SPI.h>
+#include <WString.h>
 
 #include <Menu.h>
 
@@ -126,6 +124,36 @@ char buf[20]; // generic char buffer
 Thermocouple A;
 
 
+// --PID-----------------------------------------------------------------------
+uint8_t fanValue;
+uint8_t heaterValue;
+
+double Setpoint;
+double Input;
+double Output;
+
+typedef struct {
+  double Kp;
+  double Ki;
+  double Kd;
+} PID_t;
+
+PID_t heaterPID = { 4.00, 0.05,  2.00 };
+PID_t fanPID    = { 1.00, 0.03, 10.00 };
+
+PID PID(&Input, &Output, &Setpoint, heaterPID.Kp, heaterPID.Ki, heaterPID.Kd, DIRECT);
+
+#ifdef PIDTUNE
+PID_ATune PIDTune(&Input, &Output);
+
+double aTuneStep       =  50,
+       aTuneNoise      =   1,
+       aTuneStartValue =  50; // is set to Output, i.e. 0-100% of Heater
+
+unsigned int aTuneLookBack = 30;
+#endif
+
+
 // --PROFILES------------------------------------------------------------------
 // data type for the values used in the reflow profile
 typedef struct profileValues_s {
@@ -142,12 +170,14 @@ typedef struct profileValues_s {
 Profile_t activeProfile; // the one and only instance
 int activeProfileId = 0;
 
-int fanAssistSpeed = 33; // default fan speed
+int16_t fanAssistSpeed = 33; // default fan speed
 
 // EEPROM offsets
-const uint16_t offsetFanSpeed   = MAX_PROFILES * sizeof(Profile_t) + 1; // one byte
-const uint16_t offsetProfileNum = MAX_PROFILES * sizeof(Profile_t) + 2; // one byte
-const uint16_t offsetPidConfig  = MAX_PROFILES * sizeof(Profile_t) + 3; // sizeof(PID_t)
+#define E2OFFSET_FAN_SPEED          (uint8_t *) (E2END - sizeof(PID_t) - 31)  // one byte
+#define E2OFFSET_PROFILE_NUMBER     (uint8_t *) (E2END - sizeof(PID_t) - 30)  // one byte
+#define E2OFFSET_RUNCOUNT_SUCCESS   (uint16_t *)(E2END - sizeof(PID_t) - 29)  // 2 bytes
+#define E2OFFSET_RUNCOUNT_CANCEL    (uint16_t *)(E2END - sizeof(PID_t) - 27)  // 2 bytes
+#define E2OFFSET_PID_CONFIG         (void *)    (E2END - sizeof(PID_t) - 8)   // sizeof(PID_t)
 
 
 // --UI------------------------------------------------------------------------
@@ -237,36 +267,6 @@ extern const Menu::Item_t miRampUpRate, miRampDnRate, miSoakTime,
                           miLoadProfile, miSaveProfile,
                           miPidSettingP, miPidSettingI, miPidSettingD,
                           miFanSettings;
-
-
-// --PID-----------------------------------------------------------------------
-uint8_t fanValue;
-uint8_t heaterValue;
-
-double Setpoint;
-double Input;
-double Output;
-
-typedef struct {
-  double Kp;
-  double Ki;
-  double Kd;
-} PID_t;
-
-PID_t heaterPID = { 4.00, 0.05,  2.00 };
-PID_t fanPID    = { 1.00, 0.03, 10.00 };
-
-PID PID(&Input, &Output, &Setpoint, heaterPID.Kp, heaterPID.Ki, heaterPID.Kd, DIRECT);
-
-#ifdef PIDTUNE
-PID_ATune PIDTune(&Input, &Output);
-
-double aTuneStep       =  50,
-       aTuneNoise      =   1,
-       aTuneStartValue =  50; // is set to Output, i.e. 0-100% of Heater
-
-unsigned int aTuneLookBack = 30;
-#endif
 
 
 // --HELPERS-------------------------------------------------------------------
@@ -1549,23 +1549,24 @@ bool loadParameters(uint8_t profile) {
 
 bool savePID() {
   do {} while (!(eeprom_is_ready()));
-  eeprom_write_block(&heaterPID, (void *)offsetPidConfig, sizeof(PID_t));
+  eeprom_write_block(&heaterPID, E2OFFSET_PID_CONFIG, sizeof(PID_t));
   return true;
 }
 
 bool loadPID() {
   do {} while (!(eeprom_is_ready()));
-  eeprom_read_block(&heaterPID, (void *)offsetPidConfig, sizeof(PID_t));
+  eeprom_read_block(&heaterPID, E2OFFSET_PID_CONFIG, sizeof(PID_t));
   return true;  
 }
 
 bool firstRun() { 
 #ifndef PIDTUNE
   // if all bytes of a profile in the middle of the eeprom space are 255, we assume it's a first run
-  unsigned int offset = 15 * sizeof(Profile_t);
+  // TODO: change this shit; checksum it or something else, this is garbage
+  uint8_t *offset = (uint8_t *)(15 * sizeof(Profile_t));
 
-  for (uint16_t i = offset; i < offset + sizeof(Profile_t); i++) {
-    if (EEPROM.read(i) != 255) {
+  for (uint8_t *i = offset; i < offset + sizeof(Profile_t); i++) {
+    if (eeprom_read_byte(i) != 255) {
       return false;
     }
   }
@@ -1611,19 +1612,23 @@ void factoryReset() {
 }
 
 void saveFanSpeed() {
-  EEPROM.write(offsetFanSpeed, (uint8_t)fanAssistSpeed & 0xff);
+  eeprom_write_byte(E2OFFSET_FAN_SPEED, (uint8_t)fanAssistSpeed & 0xff);
   delay(250);
 }
 
 void loadFanSpeed() {
-  fanAssistSpeed = EEPROM.read(offsetFanSpeed) & 0xff;
+  fanAssistSpeed = eeprom_read_byte(E2OFFSET_FAN_SPEED);
+}
+
+void saveRunCounter() {
+  // EEPROM.write( 
 }
 
 void saveLastUsedProfile() {
-  EEPROM.write(offsetProfileNum, (uint8_t)activeProfileId & 0xff);
+  eeprom_write_byte(E2OFFSET_PROFILE_NUMBER, (uint8_t)activeProfileId & 0xff);
 }
 
 void loadLastUsedProfile() {
-  activeProfileId = EEPROM.read(offsetProfileNum) & 0xff;
+  activeProfileId = eeprom_read_byte(E2OFFSET_PROFILE_NUMBER);
   loadParameters(activeProfileId);
 }
