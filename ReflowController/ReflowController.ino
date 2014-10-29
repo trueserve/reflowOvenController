@@ -966,7 +966,7 @@ bool saveLoadProfile(const Menu::Action_t action) {
     tft.setTextColor(ST7735_BLACK, ST7735_WHITE);
 
     if (initial) {
-      encAbsolute = activeProfileId;      
+      encAbsolute = activeProfileId;  
       printAtPos(FS("Doubleclick to exit"), TFT_LEFTCOL, 90);
     }
 
@@ -1237,6 +1237,7 @@ void loop(void)
     // are we navigating in a submenu? if so, print information on how to exit the submenu
     if (currentState == Settings && !(Engine.getParent() == &miExit || Engine.getParent() == &miEditable)) {
       // we must be in a submenu...
+      tft.setTextColor(ST7735_BLACK);
       printAtPos(FS("Doubleclick to exit"), TFT_LEFTCOL, 80);
     }  
   }
