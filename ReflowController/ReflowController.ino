@@ -163,7 +163,6 @@ typedef struct profileValues_s {
   int16_t peakDuration;
   double  rampUpRate;
   double  rampDownRate;
-  uint8_t checksum;
 } Profile_t;
 
 #define MAX_PROFILES               30
@@ -248,7 +247,8 @@ typedef struct {
 
 LastItemState_t currentlyRenderedItems[MENU_ITEMS_VISIBLE];
 
-void clearLastMenuItemRenderState() {
+void clearLastMenuItemRenderState()
+{
   // memset(&currentlyRenderedItems, 0xff, sizeof(LastItemState_t) * MENU_ITEMS_VISIBLE);
   for (uint8_t i = 0; i < MENU_ITEMS_VISIBLE; i++) {
     currentlyRenderedItems[i].mi = NULL;
@@ -274,7 +274,8 @@ extern const Menu::Item_t miRampUpRate, miRampDnRate, miSoakTime,
 #define FS(x)      (x)     // define as F(x) to store strings in flash.
                            // at this time this costs 70bytes, and we don't need the SRAM
 
-void printDouble(double val, uint8_t precision = 1) {
+void printDouble(double val, uint8_t precision = 1)
+{
   ftoa(buf, val, precision);
   tft.print(buf);
 }
@@ -291,33 +292,39 @@ void printCentered(const char *str, uint8_t y)
   tft.print(str);
 }
 
-void alignRightPrefix(uint16_t v) {
+void alignRightPrefix(uint16_t v)
+{
   if (v < 1e2) tft.print(' '); 
   if (v < 1e1) tft.print(' ');
 }
 
-bool isPidSetting(const Menu::Item_t *mi) {
+bool isPidSetting(const Menu::Item_t *mi)
+{
   return mi == &miPidSettingP || mi == &miPidSettingI || mi == &miPidSettingD;
 }
 
-bool isRampSetting(const Menu::Item_t *mi) {
+bool isRampSetting(const Menu::Item_t *mi)
+{
   return mi == &miRampUpRate || mi == &miRampDnRate;
 }
 
 
 // --MENU FN-------------------------------------------------------------------
-bool menuExit(const Menu::Action_t a) {
+bool menuExit(const Menu::Action_t a)
+{
   clearLastMenuItemRenderState();
   Engine.lastInvokedItem = &Menu::NullItem;
   menuUpdateRequest = false;
   return false;
 }
 
-bool menuDummy(const Menu::Action_t a) {
+bool menuDummy(const Menu::Action_t a)
+{
   return true;
 }
 
-void getItemValuePointer(const Menu::Item_t *mi, double **d, int16_t **i) {
+void getItemValuePointer(const Menu::Item_t *mi, double **d, int16_t **i)
+{
   if (mi == &miRampUpRate)  *d = &activeProfile.rampUpRate;
   if (mi == &miRampDnRate)  *d = &activeProfile.rampDownRate;
   if (mi == &miSoakTime)    *i = &activeProfile.soakDuration;
@@ -330,7 +337,8 @@ void getItemValuePointer(const Menu::Item_t *mi, double **d, int16_t **i) {
   if (mi == &miFanSettings) *i = &fanAssistSpeed;
 }
 
-bool getItemValueLabel(const Menu::Item_t *mi, char *label) {
+bool getItemValueLabel(const Menu::Item_t *mi, char *label)
+{
   int16_t *iValue = NULL;
   double  *dValue = NULL;
   char *p;
@@ -363,7 +371,8 @@ bool getItemValueLabel(const Menu::Item_t *mi, char *label) {
   return dValue || iValue;
 }
 
-bool editNumericalValue(const Menu::Action_t action) {
+bool editNumericalValue(const Menu::Action_t action)
+{
   if (action == Menu::actionDisplay) {
     bool initial = currentState != Edit;
     currentState = Edit;
@@ -456,7 +465,8 @@ bool factoryReset(const Menu::Action_t action);
 // ----------------------------------------------------------------------------
 void toggleAutoTune();
 
-bool cycleStart(const Menu::Action_t action) {
+bool cycleStart(const Menu::Action_t action)
+{
   if (action == Menu::actionDisplay) {
     startCycleZeroCrossTicks = zeroCrossTicks;
     menuExit(action);
@@ -475,7 +485,8 @@ bool cycleStart(const Menu::Action_t action) {
 
 
 // --RENDER--------------------------------------------------------------------
-void renderMenuItem(const Menu::Item_t *mi, uint8_t pos) {
+void renderMenuItem(const Menu::Item_t *mi, uint8_t pos)
+{
   //ScopedTimer tm("  render menuitem");
   bool isCurrent = Engine.currentItem == mi;
   uint8_t y = pos * MENU_ITEM_HEIGHT + 2;
@@ -557,7 +568,8 @@ uint8_t index = 0;              // the index of the current reading
 
 // --SSR-----------------------------------------------------------------------
 // Ensure that relay outputs are off (low) when starting
-void setupRelayPins(void) {
+void setupRelayPins(void)
+{
   digitalWrite(PIN_HEATER, LOW);
   pinMode(PIN_HEATER, OUTPUT);
   
@@ -565,7 +577,8 @@ void setupRelayPins(void) {
   pinMode(PIN_FAN, OUTPUT);
 }
 
-void killRelayPins(void) {
+void killRelayPins(void)
+{
   Timer1.stop();
 #ifndef FAKE_HW
   detachInterrupt(INT_ZX);
@@ -615,7 +628,8 @@ struct {
 // per ZX, process one channel per interrupt only
 // NB: use native port IO instead of digitalWrite for better performance
 // true: using digitalWrite again for better compatibility
-void zeroCrossingIsr(void) {
+void zeroCrossingIsr(void)
+{
   static uint8_t ch = 0;
 
   // reset phase control timer
@@ -654,7 +668,8 @@ ISR(TIMER2_COMPA_vect) {
 #endif
 
 // --TIMER ISR-----------------------------------------------------------------
-void timerIsr(void) { // ticks with 100µS
+void timerIsr(void)
+{ // ticks with 100µS
   static uint32_t lastTicks = 0;
 
   // phase control for the fan 
@@ -688,7 +703,8 @@ void timerIsr(void) { // ticks with 100µS
 
 
 // ----------------------------------------------------------------------------
-void abortWithError(int error) {
+void abortWithError(int error)
+{
   killRelayPins();
 
   tft.setTextColor(ST7735_WHITE, ST7735_RED);
@@ -724,7 +740,8 @@ void abortWithError(int error) {
 
 
 // ----------------------------------------------------------------------------
-void displayThermocoupleData(struct Thermocouple* input) {
+void displayThermocoupleData(struct Thermocouple* input)
+{
   switch (input->stat) {
     case 0:
       printDouble(input->temperature);
@@ -742,7 +759,8 @@ uint16_t pxPerS;
 uint16_t pxPerC;
 uint16_t xOffset; // used for wraparound on x axis
 
-void updateProcessDisplay() {
+void updateProcessDisplay()
+{
   const uint8_t h       = 86;
   const uint8_t w       = TFT_WIDTH;
   const uint8_t yOffset = TFT_HEIGHT - 98; // space not available for graph
@@ -927,7 +945,8 @@ void updateProcessDisplay() {
 
 
 // --RESET---------------------------------------------------------------------
-bool factoryReset(const Menu::Action_t action) {
+bool factoryReset(const Menu::Action_t action)
+{
 #ifndef PIDTUNE
   if (action == Menu::actionDisplay) {
     bool initial = currentState != Edit;
@@ -956,7 +975,8 @@ bool factoryReset(const Menu::Action_t action) {
 
 
 // --PROFILE LOAD/SAVE---------------------------------------------------------
-bool saveLoadProfile(const Menu::Action_t action) {
+bool saveLoadProfile(const Menu::Action_t action)
+{
 #ifndef PIDTUNE
   bool isLoad = Engine.currentItem == &miLoadProfile;
 
@@ -1001,7 +1021,8 @@ bool saveLoadProfile(const Menu::Action_t action) {
 
 
 // --INIT----------------------------------------------------------------------
-void setup() {
+void setup()
+{
   // configure SSR outputs to initial state
   setupRelayPins();
   
@@ -1138,7 +1159,8 @@ void setup() {
 
 uint32_t lastRampTicks;
 
-void updateRampSetpoint(bool down = false) {
+void updateRampSetpoint(bool down = false)
+{
   if (zeroCrossTicks > lastRampTicks + MS_PER_SINE) {
     double rate = (down) ? activeProfile.rampDownRate : activeProfile.rampUpRate;
     Setpoint += (rate / MS_PER_SINE * (zeroCrossTicks - lastRampTicks)) * ((down) ? -1 : 1);
@@ -1149,7 +1171,8 @@ void updateRampSetpoint(bool down = false) {
 // ----------------------------------------------------------------------------
 
 #ifdef PIDTUNE
-void toggleAutoTune() {
+void toggleAutoTune()
+{
  if(currentState != Tune) { //Set the output to the desired starting frequency.
     currentState = Tune;
 
@@ -1477,7 +1500,8 @@ void loop(void)
   Channels[CHANNEL_FAN].target = 90 - (uint8_t)fanTmp;
 }
 
-void memoryFeedbackScreen(uint8_t profileId, bool loading) {
+void memoryFeedbackScreen(uint8_t profileId, bool loading)
+{
   tft.fillScreen(ST7735_GREEN);
   tft.setTextColor(ST7735_BLACK);
   printAtPos(loading ? FS("Loading") : FS("Saving"), TFT_LEFTCOL + 8, 50);
@@ -1487,7 +1511,8 @@ void memoryFeedbackScreen(uint8_t profileId, bool loading) {
 
 
 // --EEPROM------------------------------------------------------------------
-void saveProfile(unsigned int targetProfile, bool quiet) {
+void saveProfile(unsigned int targetProfile, bool quiet)
+{
 #ifndef PIDTUNE
   activeProfileId = targetProfile;
 
@@ -1500,17 +1525,10 @@ void saveProfile(unsigned int targetProfile, bool quiet) {
 #endif
 }
 
-void loadProfile(unsigned int targetProfile) {
+void loadProfile(unsigned int targetProfile)
+{
   memoryFeedbackScreen(targetProfile, true);
-  bool ok = loadParameters(targetProfile);
-
-#if 0
-  if (!ok) {
-    lcd.printAtPos(FS("Checksum error!"), TFT_LEFTCOL, 2);
-    lcd.printAtPos(FS("Review profile."), TFT_LEFTCOL, 22);
-    delay(2500);
-  }
-#endif
+  loadParameters(targetProfile);
 
   // save in any way, as we have no undo
   activeProfileId = targetProfile;
@@ -1519,15 +1537,10 @@ void loadProfile(unsigned int targetProfile) {
   delay(500);
 }
 
-#define WITH_CHECKSUM 1
-
-bool saveParameters(uint8_t profile) {
+bool saveParameters(uint8_t profile)
+{
 #ifndef PIDTUNE
   uint16_t offset = profile * sizeof(Profile_t);
-
-#ifdef WITH_CHECKSUM
-  activeProfile.checksum = crc8((uint8_t *)&activeProfile, sizeof(Profile_t) - sizeof(uint8_t));
-#endif
 
   do {} while (!(eeprom_is_ready()));
   eeprom_write_block(&activeProfile, (void *)offset, sizeof(Profile_t));
@@ -1535,47 +1548,56 @@ bool saveParameters(uint8_t profile) {
   return true;
 }
 
-bool loadParameters(uint8_t profile) {
+void loadParameters(uint8_t profile)
+{
   uint16_t offset = profile * sizeof(Profile_t);
 
   do {} while (!(eeprom_is_ready()));
   eeprom_read_block(&activeProfile, (void *)offset, sizeof(Profile_t));
-
-#ifdef WITH_CHECKSUM
-  return activeProfile.checksum == crc8((uint8_t *)&activeProfile, sizeof(Profile_t) - sizeof(uint8_t));
-#else
-  return true;  
-#endif
 }
 
-bool savePID() {
-  do {} while (!(eeprom_is_ready()));
-  eeprom_write_block(&heaterPID, E2OFFSET_PID_CONFIG, sizeof(PID_t));
-  return true;
-}
-
-bool loadPID() {
+bool loadPID()
+{
   do {} while (!(eeprom_is_ready()));
   eeprom_read_block(&heaterPID, E2OFFSET_PID_CONFIG, sizeof(PID_t));
   return true;  
 }
 
-bool firstRun() { 
-#ifndef PIDTUNE
-  // if all bytes of a profile in the middle of the eeprom space are 255, we assume it's a first run
-  // TODO: change this shit; checksum it or something else, this is garbage
-  uint8_t *offset = (uint8_t *)(15 * sizeof(Profile_t));
-
-  for (uint8_t *i = offset; i < offset + sizeof(Profile_t); i++) {
-    if (eeprom_read_byte(i) != 255) {
-      return false;
-    }
-  }
-#endif
+bool savePID()
+{
+  do {} while (!(eeprom_is_ready()));
+  eeprom_write_block(&heaterPID, E2OFFSET_PID_CONFIG, sizeof(PID_t));
+  UpdateChecksum();
   return true;
 }
 
-void makeDefaultProfile() {
+uint8_t E2Checksum()
+{
+  uint8_t checksum = 0;
+  
+  for (uint16_t addr = 0; addr < E2END; addr++)
+    checksum += eeprom_read_byte((uint8_t *)addr);
+    
+  return checksum;
+}
+
+void UpdateChecksum()
+{
+  eeprom_write_byte((uint8_t *)E2END, E2Checksum());
+}
+
+bool firstRun()
+{
+#ifndef PIDTUNE
+  if (eeprom_read_byte((uint8_t *)E2END) == E2Checksum())
+    return false;
+#endif
+
+  return true;
+}
+
+void makeDefaultProfile()
+{
   activeProfile.soakTemp     = 145;
   activeProfile.soakDuration =  75;
   activeProfile.peakTemp     = 235;
@@ -1584,7 +1606,8 @@ void makeDefaultProfile() {
   activeProfile.rampDownRate =   1.80;
 }
 
-void factoryReset() {
+void factoryReset()
+{
 #ifndef PIDTUNE
   makeDefaultProfile();
 
@@ -1607,29 +1630,42 @@ void factoryReset() {
 
   activeProfileId = 0;
   saveLastUsedProfile();
+  
+  UpdateChecksum();
 
   delay(500);
 #endif
 }
 
-void saveFanSpeed() {
-  eeprom_write_byte(E2OFFSET_FAN_SPEED, (uint8_t)fanAssistSpeed & 0xff);
-  delay(250);
-}
-
-void loadFanSpeed() {
+void loadFanSpeed()
+{
   fanAssistSpeed = eeprom_read_byte(E2OFFSET_FAN_SPEED);
 }
 
-void saveRunCounter() {
+void saveFanSpeed()
+{
+  eeprom_write_byte(E2OFFSET_FAN_SPEED, (uint8_t)fanAssistSpeed & 0xff);
+  UpdateChecksum();
+}
+
+void updateRunCounter()
+{
+  
+}
+
+void saveRunCounter()
+{
   // EEPROM.write( 
 }
 
-void saveLastUsedProfile() {
-  eeprom_write_byte(E2OFFSET_PROFILE_NUMBER, (uint8_t)activeProfileId & 0xff);
-}
-
-void loadLastUsedProfile() {
+void loadLastUsedProfile()
+{
   activeProfileId = eeprom_read_byte(E2OFFSET_PROFILE_NUMBER);
   loadParameters(activeProfileId);
+}
+
+void saveLastUsedProfile()
+{
+  eeprom_write_byte(E2OFFSET_PROFILE_NUMBER, (uint8_t)activeProfileId & 0xff);
+  UpdateChecksum();
 }
