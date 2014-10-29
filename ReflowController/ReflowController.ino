@@ -973,10 +973,14 @@ bool saveLoadProfile(const Menu::Action_t action) {
     if (encAbsolute > MAX_PROFILES) encAbsolute = MAX_PROFILES;
     if (encAbsolute <  0) encAbsolute =  0;
 
-    printAtPos("Click to ", TFT_LEFTCOL, 80);
-    tft.print((isLoad) ? "load " : "save ");
+    printAtPos(FS("Click to "), TFT_LEFTCOL, 80);
+    tft.print((isLoad) ? FS("load ") : FS("save "));
     tft.setTextColor(ST7735_WHITE, ST7735_RED);
     tft.print(encAbsolute);
+
+    // fix garbage potentially showing up after digit
+    tft.setTextColor(ST7735_BLACK, ST7735_WHITE);
+    tft.print("   ");
   }
 
   if (action == Menu::actionTrigger) {
@@ -1235,11 +1239,19 @@ void loop(void)
     Engine.render(renderMenuItem, MENU_ITEMS_VISIBLE);    
     
     // are we navigating in a submenu? if so, print information on how to exit the submenu
-    if (currentState == Settings && !(Engine.getParent() == &miExit || Engine.getParent() == &miEditable)) {
-      // we must be in a submenu...
-      tft.setTextColor(ST7735_BLACK);
-      printAtPos(FS("Doubleclick to exit"), TFT_LEFTCOL, 80);
-    }  
+    if (currentState == Settings) {
+      tft.setTextColor(ST7735_BLACK);  // should always be safe to do this?
+      
+      if (!(Engine.getParent() == &miExit || Engine.getParent() == &miEditable)) {
+        // we must be in a submenu...
+        printAtPos(FS("Doubleclick to exit"), TFT_LEFTCOL, 80);
+      }
+      else if (Engine.lastInvokedItem == &Menu::NullItem) {
+        // we are at root menu; show the currently loaded profile
+        printAtPos(FS("Using Profile "), TFT_LEFTCOL, 80);
+        tft.print(activeProfileId);
+      }
+    }
   }
 
   // --------------------------------------------------------------------------
@@ -1469,7 +1481,7 @@ void memoryFeedbackScreen(uint8_t profileId, bool loading) {
   tft.setTextColor(ST7735_BLACK);
   printAtPos(loading ? FS("Loading") : FS("Saving"), TFT_LEFTCOL + 8, 50);
   tft.print(FS(" profile "));
-  tft.print(profileId);  
+  tft.print(profileId);
 }
 
 
@@ -1488,7 +1500,7 @@ void saveProfile(unsigned int targetProfile, bool quiet) {
 }
 
 void loadProfile(unsigned int targetProfile) {
-  memoryFeedbackScreen(activeProfileId, true);
+  memoryFeedbackScreen(targetProfile, true);
   bool ok = loadParameters(targetProfile);
 
 #if 0
