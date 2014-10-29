@@ -138,10 +138,10 @@ typedef struct {
   double Kd;
 } PID_t;
 
-PID_t heaterPID = { 4.00, 0.05,  2.00 };
+PID_t heaterPID;
 PID_t fanPID    = { 1.00, 0.03, 10.00 };
 
-PID PID(&Input, &Output, &Setpoint, heaterPID.Kp, heaterPID.Ki, heaterPID.Kd, DIRECT);
+PID PID(&Input, &Output, &Setpoint, 4.00, 0.05, 2.00, DIRECT);  // these PID values are ignored
 
 #ifdef PIDTUNE
 PID_ATune PIDTune(&Input, &Output);
@@ -173,11 +173,12 @@ int activeProfileId = 0;
 int16_t fanAssistSpeed = 33; // default fan speed
 
 // EEPROM offsets
-#define E2OFFSET_FAN_SPEED          (uint8_t *) (E2END - sizeof(PID_t) - 31)  // one byte
-#define E2OFFSET_PROFILE_NUMBER     (uint8_t *) (E2END - sizeof(PID_t) - 30)  // one byte
-#define E2OFFSET_RUNCOUNT_SUCCESS   (uint16_t *)(E2END - sizeof(PID_t) - 29)  // 2 bytes
-#define E2OFFSET_RUNCOUNT_CANCEL    (uint16_t *)(E2END - sizeof(PID_t) - 27)  // 2 bytes
-#define E2OFFSET_PID_CONFIG         (void *)    (E2END - sizeof(PID_t) - 8)   // sizeof(PID_t)
+#define E2OFFSET_PID_CONFIG         (void *)    (E2END - 16 - sizeof(PID_t))  // sizeof(PID_t)
+#define E2OFFSET_FAN_SPEED          (uint8_t *) (E2END - 16)  // one byte
+#define E2OFFSET_PROFILE_NUMBER     (uint8_t *) (E2END - 15)  // one byte
+#define E2OFFSET_RUNCOUNT_SUCCESS   (uint16_t *)(E2END - 12)  // 2 bytes
+#define E2OFFSET_RUNCOUNT_CANCEL    (uint16_t *)(E2END - 10)  // 2 bytes
+#define E2OFFSET_CHECKSUM           (uint8_t *) (E2END)       // 1 byte
 
 
 // --UI------------------------------------------------------------------------
@@ -1575,12 +1576,12 @@ bool firstRun() {
 }
 
 void makeDefaultProfile() {
-  activeProfile.soakTemp     = 130;
-  activeProfile.soakDuration =  80;
-  activeProfile.peakTemp     = 220;
-  activeProfile.peakDuration =  40;
-  activeProfile.rampUpRate   =   0.80;
-  activeProfile.rampDownRate =   2.0;
+  activeProfile.soakTemp     = 145;
+  activeProfile.soakDuration =  75;
+  activeProfile.peakTemp     = 235;
+  activeProfile.peakDuration =  45;
+  activeProfile.rampUpRate   =   0.90;
+  activeProfile.rampDownRate =   1.80;
 }
 
 void factoryReset() {
