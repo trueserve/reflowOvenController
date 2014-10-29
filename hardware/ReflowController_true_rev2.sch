@@ -6,7 +6,7 @@
 <setting alwaysvectorfont="no"/>
 <setting verticaltext="up"/>
 </settings>
-<grid distance="0.1" unitdist="inch" unit="inch" style="lines" multiple="1" display="yes" altdistance="0.01" altunitdist="inch" altunit="inch"/>
+<grid distance="0.1" unitdist="inch" unit="inch" style="lines" multiple="1" display="no" altdistance="0.01" altunitdist="inch" altunit="inch"/>
 <layers>
 <layer number="1" name="Top" color="4" fill="1" visible="no" active="no"/>
 <layer number="2" name="Route2" color="1" fill="3" visible="no" active="no"/>
@@ -14636,7 +14636,7 @@ http://dangerousprototypes.com</description>
 <part name="D1" library="adafruit" deviceset="DIODE" device="SOD-123"/>
 <part name="C5" library="rcl" deviceset="C-EU" device="C0805" value="10n"/>
 <part name="GND10" library="supply1" deviceset="GND" device=""/>
-<part name="C7" library="rcl" deviceset="C-EU" device="025-025X050" value="100n"/>
+<part name="C7" library="rcl" deviceset="C-EU" device="150-054X183" value="100n"/>
 <part name="GND11" library="supply1" deviceset="GND" device=""/>
 <part name="OC1" library="optocoupler" deviceset="PC817" device=""/>
 <part name="A1" library="ic-package" deviceset="DIL32" device="" value="ARDUINO_PRO_NANO"/>
@@ -14801,9 +14801,9 @@ with about 220R</text>
 <attribute name="VALUE" x="15.748" y="25.019" size="1.778" layer="96" rot="R180"/>
 </instance>
 <instance part="GND10" gate="1" x="10.16" y="180.34" smashed="yes"/>
-<instance part="C7" gate="G$1" x="45.72" y="109.22" smashed="yes">
-<attribute name="NAME" x="44.704" y="113.919" size="1.778" layer="95"/>
-<attribute name="VALUE" x="43.434" y="100.965" size="1.778" layer="96"/>
+<instance part="C7" gate="G$1" x="45.72" y="106.68" smashed="yes" rot="R180">
+<attribute name="NAME" x="46.736" y="101.981" size="1.778" layer="95" rot="R180"/>
+<attribute name="VALUE" x="48.006" y="114.935" size="1.778" layer="96" rot="R180"/>
 </instance>
 <instance part="GND11" gate="1" x="55.88" y="144.78" smashed="yes"/>
 <instance part="OC1" gate="A" x="27.94" y="106.68" rot="MR0"/>
@@ -15096,28 +15096,6 @@ with about 220R</text>
 <pinref part="AC-IN" gate="-2" pin="KL"/>
 <wire x1="68.58" y1="93.98" x2="68.58" y2="96.52" width="0.1524" layer="91"/>
 <junction x="68.58" y="96.52"/>
-</segment>
-</net>
-<net name="N$9" class="0">
-<segment>
-<pinref part="R9" gate="G$1" pin="2"/>
-<pinref part="C7" gate="G$1" pin="1"/>
-<wire x1="45.72" y1="111.76" x2="48.26" y2="111.76" width="0.1524" layer="91"/>
-<pinref part="OC1" gate="A" pin="A"/>
-<wire x1="38.1" y1="109.22" x2="40.64" y2="109.22" width="0.1524" layer="91"/>
-<wire x1="40.64" y1="109.22" x2="40.64" y2="111.76" width="0.1524" layer="91"/>
-<wire x1="40.64" y1="111.76" x2="45.72" y2="111.76" width="0.1524" layer="91"/>
-<junction x="45.72" y="111.76"/>
-</segment>
-</net>
-<net name="N$10" class="0">
-<segment>
-<pinref part="R10" gate="G$1" pin="2"/>
-<pinref part="C7" gate="G$1" pin="2"/>
-<wire x1="45.72" y1="104.14" x2="48.26" y2="104.14" width="0.1524" layer="91"/>
-<pinref part="OC1" gate="A" pin="C"/>
-<wire x1="38.1" y1="104.14" x2="45.72" y2="104.14" width="0.1524" layer="91"/>
-<junction x="45.72" y="104.14"/>
 </segment>
 </net>
 <net name="ZEROX" class="0">
@@ -15636,6 +15614,28 @@ with about 220R</text>
 <pinref part="JP1" gate="G$1" pin="2"/>
 <wire x1="269.24" y1="149.86" x2="269.24" y2="160.02" width="0.1524" layer="91"/>
 <pinref part="+3V3" gate="G$1" pin="+3V3"/>
+</segment>
+</net>
+<net name="N$6" class="0">
+<segment>
+<wire x1="40.64" y1="109.22" x2="40.64" y2="111.76" width="0.1524" layer="91"/>
+<pinref part="OC1" gate="A" pin="A"/>
+<wire x1="38.1" y1="109.22" x2="40.64" y2="109.22" width="0.1524" layer="91"/>
+<pinref part="R9" gate="G$1" pin="2"/>
+<pinref part="C7" gate="G$1" pin="2"/>
+<wire x1="48.26" y1="111.76" x2="45.72" y2="111.76" width="0.1524" layer="91"/>
+<wire x1="45.72" y1="111.76" x2="40.64" y2="111.76" width="0.1524" layer="91"/>
+<junction x="45.72" y="111.76"/>
+</segment>
+</net>
+<net name="N$9" class="0">
+<segment>
+<pinref part="R10" gate="G$1" pin="2"/>
+<pinref part="C7" gate="G$1" pin="1"/>
+<wire x1="48.26" y1="104.14" x2="45.72" y2="104.14" width="0.1524" layer="91"/>
+<pinref part="OC1" gate="A" pin="C"/>
+<wire x1="45.72" y1="104.14" x2="38.1" y2="104.14" width="0.1524" layer="91"/>
+<junction x="45.72" y="104.14"/>
 </segment>
 </net>
 </nets>
