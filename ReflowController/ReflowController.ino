@@ -938,7 +938,10 @@ void updateProcessDisplay()
   tft.print((int)fanValue);
   tft.print('%');
 
-  tft.print(" \x12 "); // alternative: \x7f
+  tft.print(" \x12"); // alternative: \x7f
+  if (rampRate >= 0) {
+    tft.print(" ");   // space is filled with negative sign otherwise
+  }
   printDouble(rampRate);
   tft.print("\367C/s    ");
 }

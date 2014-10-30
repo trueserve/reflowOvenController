@@ -20,7 +20,8 @@ low priority
 [/] Log (and show) completed and canceled run count with the oven, overall elapsed time run (aging?)
 [ ] Rework ST7735 module - KP's is bigger than Adafruit's when compiled?
     update 20141027: it's because he has inlined everything.
-[ ] add eeprom checksum for firstrun support, rather than the weirdass read code that exists now
+[x] add eeprom checksum for firstrun support, rather than the weirdass read code that exists now
+[ ] replacing FP math with integer math where possible to save flash space
 
 optional
 [ ] look into adding scrollbar, and maybe a scroll area border
@@ -28,3 +29,4 @@ optional
 [ ] add temperature calibration / offset (is this even necessary?)
 [ ] find out how kp gets his code to even fit in a pro micro (it doesn't for me and he did not answer)
 [?] wonder why I am fighting with such a small platform and limitations of arduino for this
+[ ] add inverted color support
