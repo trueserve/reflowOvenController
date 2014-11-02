@@ -14,9 +14,10 @@
 #define LCD_ROTATE          2   // 0 or 2 = vertical, 1 or 3 = horizontal
 #define LCD_TABTYPE         INITR_BLACKTAB  // lcd type, usually INITR_RED/GREEN/BLACKTAB
 
-#define GRAPH_DRAW_LINES    0   // 0 = use pixels (sometimes has gaps), 1 = use lines (no gaps, nicer, ~100bytes larger code)
-
 #define IDLE_SAFE_TEMP      50  // temp in degC that the oven is considered safe/done cooling
+
+#define GRAPH_DRAW_LINES    0   // 0 = use pixels (sometimes has gaps), 1 = use lines (no gaps, nicer, ~100bytes larger code)
+#define GRAPH_STOP_ON_DONE  1   // 0 = keep looping graph after done, 1 = stop timer/graphing after idle safe temp reached
 
 //#define FAKE_HW             1
 //#define PIDTUNE             1   // autotune wouldn't fit in the 28k available on my arduino pro micro.
@@ -795,6 +796,14 @@ void updateProcessDisplay()
   uint16_t dx, dy;
   uint8_t y = 2;
   double tmp;
+  
+#if (GRAPH_STOP_ON_DONE == 1)
+  static uint8_t completed = 0;
+  if (currentState == Complete) {
+    if (completed == 1) return;
+    completed = 1;
+  }
+#endif
 
   // header & initial view
   tft.setTextColor(ST7735_WHITE, ST7735_BLUE);
