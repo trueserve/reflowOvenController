@@ -14,6 +14,8 @@
 #define LCD_ROTATE          2   // 0 or 2 = vertical, 1 or 3 = horizontal
 #define LCD_TABTYPE         INITR_BLACKTAB  // lcd type, usually INITR_RED/GREEN/BLACKTAB
 
+#define GRAPH_DRAW_LINES    0   // 0 = use pixels (sometimes has gaps), 1 = use lines (no gaps, nicer, ~100bytes larger code)
+
 #define IDLE_SAFE_TEMP      50  // temp in degC that the oven is considered safe/done cooling
 
 //#define FAKE_HW             1
@@ -777,6 +779,10 @@ void updateProcessDisplay()
 
   static uint8_t lastState = 0;
 
+#if (GRAPH_DRAW_LINES == 1)
+  static uint16_t old_dx, old_dy_sp, old_dy_tc;
+#endif
+
   uint16_t dx, dy;
   uint8_t y = 2;
   double tmp;
@@ -820,6 +826,12 @@ void updateProcessDisplay()
       uint16_t l = h - (tg * pxPerC / 100) + yOffset;
       tft.drawFastHLine(0, l, TFT_WIDTH, tft.Color565(0xe0, 0xe0, 0xe0));
     }
+
+#if (GRAPH_DRAW_LINES == 1)    
+    old_dx = 0;
+    old_dy_sp = old_dy_tc = TFT_HEIGHT - 11;
+#endif
+    
 #ifdef GRAPH_VERBOSE
     Serial.print("Calc pxPerC/S: ");
     Serial.print(pxPerC);
@@ -928,11 +940,22 @@ void updateProcessDisplay()
 
   // temperature setpoint
   dy = h - ((uint16_t)Setpoint * pxPerC / 100) + yOffset;
+#if (GRAPH_DRAW_LINES == 1)
+  tft.drawLine(old_dx, old_dy_sp, dx, dy, ST7735_BLUE);
+  old_dy_sp = dy;
+#else
   tft.drawPixel(dx, dy, ST7735_BLUE);
+#endif
 
   // actual temperature
   dy = h - ((uint16_t)Tc[0].temperature * pxPerC / 100) + yOffset;
+#if (GRAPH_DRAW_LINES == 1)
+  tft.drawLine(old_dx, old_dy_tc, dx, dy, ST7735_RED);
+  old_dy_tc = dy;
+  old_dx = dx;
+#else
   tft.drawPixel(dx, dy, ST7735_RED);
+#endif
 
   // bottom line
   y = TFT_HEIGHT - 9;
