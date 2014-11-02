@@ -36,7 +36,6 @@
 
 #include <Menu.h>
 
-#include <ClickEncoder.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7735.h>
 
@@ -60,16 +59,26 @@ const char *ver = "3.1_tr01";
 
 
 // --FREQ----------------------------------------------------------------------
-#define TIMER1_ISR_CYCLE      250     // ms per timer1 tick. DEFAULT_LOOP_DELAY depends on this.
-                                      // at 250, we get a counter value of 2000, prescale 1.
-#if (LINE_FREQ == 50)
-  #define MS_PER_SINE         100     // for 50Hz mains, 100ms per sinusoid
-#else
-  #define MS_PER_SINE         83.333  // for 60Hz mains, 83.333ms per sinusoid
-#endif
+#define TIMER1_ISR_CYCLE      600     // ms per timer1 tick. DEFAULT_LOOP_DELAY depends on this. fyi, TimerOne runs in mode 8.
+                                      // at 600, we are divisible by 100 or 120, and get a counter value of 4800, prescale 1.
 
-#define DEFAULT_LOOP_DELAY    (F_CPU / LINE_FREQ) / 2000
+#define MS_PER_SINE           (double)(5000 / LINE_FREQ)     // 50Hz mains is 100ms per sinusoid; 60Hz is 83.333
 
+#define DEFAULT_LOOP_DELAY    (uint16_t)(((F_CPU / 2000000) * TIMER1_ISR_CYCLE) / (LINE_FREQ * 2))     // 50Hz = 48, 60Hz = 40
+
+
+// --CLICK ENCODER-------------------------------------------------------------
+#define ENC_CUSTOM_INTERVAL   1
+#define ENC_BUTTONINTERVAL    20       // 12ms
+#define ENC_DOUBLECLICKTIME   1000     // 600ms
+#define ENC_HOLDTIME          2000     // 1.2s
+
+#define ENC_CUSTOM_ACCEL      1
+#define ENC_ACCEL_TOP         5000
+#define ENC_ACCEL_INC         40
+#define ENC_ACCEL_DEC         3
+
+#include <ClickEncoder.h>
 
 
 // --HARDWARE CONFIG-----------------------------------------------------------
@@ -702,9 +711,7 @@ void timerIsr(void)
   }
 
   // handle encoder + button
-  if ((timerTicks % 4) == 0) {
-    Encoder.service();
-  }
+  Encoder.service();
 
   timerTicks++;
 
@@ -1381,7 +1388,7 @@ void loop(void)
     Input = airTemp[NUMREADINGS - 1].temp; // update the variable the PID reads
 
     // display update
-    if (zeroCrossTicks - lastDisplayUpdate > 50) {
+    if (zeroCrossTicks - lastDisplayUpdate > 33) {
       lastDisplayUpdate = zeroCrossTicks;
       if (currentState > UIMenuEnd) {
         updateProcessDisplay();
