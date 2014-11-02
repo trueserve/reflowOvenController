@@ -149,11 +149,10 @@ PID PID(&Input, &Output, &Setpoint, 4.00, 0.05, 2.00, DIRECT);  // these PID val
 #ifdef PIDTUNE
 PID_ATune PIDTune(&Input, &Output);
 
-double aTuneStep       =  50,
-       aTuneNoise      =   1,
-       aTuneStartValue =  50; // is set to Output, i.e. 0-100% of Heater
-
-unsigned int aTuneLookBack = 30;
+#define AUTOTUNE_STEP            50
+#define AUTOTUNE_NOISE            1
+#define AUTOTUNE_START_VALUE     50
+#define AUTOTUNE_LOOKBACK        30
 #endif
 
 
@@ -1182,10 +1181,10 @@ void toggleAutoTune()
  if(currentState != Tune) { //Set the output to the desired starting frequency.
     currentState = Tune;
 
-    Output = aTuneStartValue;
-    PIDTune.SetNoiseBand(aTuneNoise);
-    PIDTune.SetOutputStep(aTuneStep);
-    PIDTune.SetLookbackSec((int)aTuneLookBack);
+    Output = AUTOTUNE_START_VALUE;
+    PIDTune.SetNoiseBand(AUTOTUNE_NOISE);
+    PIDTune.SetOutputStep(AUTOTUNE_STEP);
+    PIDTune.SetLookbackSec(AUTOTUNE_LOOKBACK);
   }
   else { // cancel autotune
     PIDTune.Cancel();
