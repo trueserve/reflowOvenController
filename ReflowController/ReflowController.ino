@@ -60,13 +60,16 @@ const char *ver = "3.1_tr01";
 
 
 // --FREQ----------------------------------------------------------------------
+#define TIMER1_ISR_CYCLE      250     // ms per timer1 tick. DEFAULT_LOOP_DELAY depends on this.
+                                      // at 250, we get a counter value of 2000, prescale 1.
 #if (LINE_FREQ == 50)
   #define MS_PER_SINE         100     // for 50Hz mains, 100ms per sinusoid
-  #define DEFAULT_LOOP_DELAY  89
 #else
   #define MS_PER_SINE         83.333  // for 60Hz mains, 83.333ms per sinusoid
-  #define DEFAULT_LOOP_DELAY  74      // this has NOT been verified
 #endif
+
+#define DEFAULT_LOOP_DELAY    (F_CPU / LINE_FREQ) / 2000
+
 
 
 // --HARDWARE CONFIG-----------------------------------------------------------
@@ -80,7 +83,7 @@ const char *ver = "3.1_tr01";
  #define LCD_DC       9
  #define LCD_RST      8
 #else
- #error "Please set a board type
+ #error "Please set a board type"
 #endif
 
 // Maxim TC
@@ -499,7 +502,6 @@ bool cycleStart(const Menu::Action_t action)
 // --RENDER--------------------------------------------------------------------
 void renderMenuItem(const Menu::Item_t *mi, uint8_t pos)
 {
-  //ScopedTimer tm("  render menuitem");
   bool isCurrent = Engine.currentItem == mi;
   uint8_t y = pos * MENU_ITEM_HEIGHT + 2;
 
@@ -622,7 +624,7 @@ Channel_t Channels[] = {
 };
 
 // delay to align relay activation with the actual zero crossing
-uint16_t zxLoopDelay = 0;
+uint16_t zxLoopDelay;
 
 #ifdef WITH_CALIBRATION
 // calibrate zero crossing: how many timerIsr happen within one zero crossing
@@ -681,7 +683,7 @@ ISR(TIMER2_COMPA_vect) {
 
 // --TIMER ISR-----------------------------------------------------------------
 void timerIsr(void)
-{ // ticks with 100µS
+{
   static uint32_t lastTicks = 0;
 
   // phase control for the fan 
@@ -700,7 +702,7 @@ void timerIsr(void)
   }
 
   // handle encoder + button
-  if (!(timerTicks % 10)) {
+  if ((timerTicks % 4) == 0) {
     Encoder.service();
   }
 
@@ -1107,7 +1109,7 @@ void setup()
   PID.SetMode(AUTOMATIC);
 
   // mainline timer
-  Timer1.initialize(100);
+  Timer1.initialize(TIMER1_ISR_CYCLE);
   Timer1.attachInterrupt(timerIsr);
   
 #ifndef FAKE_HW
@@ -1296,9 +1298,9 @@ void loop(void)
     if (currentState < UIMenuEnd && !encMovement && currentState != Edit && previousState != Edit) { // clear menu on child/parent navigation
       tft.fillScreen(ST7735_WHITE);
     }
-  
-    Engine.render(renderMenuItem, MENU_ITEMS_VISIBLE);    
-    
+
+    Engine.render(renderMenuItem, MENU_ITEMS_VISIBLE);
+
     // are we navigating in a submenu? if so, print information on how to exit the submenu
     if (currentState == Settings) {
       tft.setTextColor(ST7735_BLACK);  // should always be safe to do this?
