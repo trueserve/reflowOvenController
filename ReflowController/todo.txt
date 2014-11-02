@@ -22,6 +22,7 @@ low priority
     update 20141027: it's because he has inlined everything.
 [x] add eeprom checksum for firstrun support, rather than the weirdass read code that exists now
 [ ] replacing FP math with integer math where possible to save flash space
+[ ] replace graph drawing routine drawPixel with drawLine
 
 optional
 [ ] look into adding scrollbar, and maybe a scroll area border

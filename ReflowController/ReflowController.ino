@@ -77,6 +77,8 @@ const char *ver = "3.1_tr01";
  #define LCD_CS       6
  #define LCD_DC       9
  #define LCD_RST      8
+#else
+ #error "Please set a board type
 #endif
 
 // Maxim TC
@@ -121,7 +123,8 @@ uint32_t lastDisplayUpdate       = 0;
 char buf[20]; // generic char buffer
 
 #define TC_ERROR_TOLERANCE         5  // allow for n consecutive errors before bailing out
-Thermocouple A;
+
+Thermocouple Tc[2];
 
 
 // --PID-----------------------------------------------------------------------
@@ -828,7 +831,7 @@ void updateProcessDisplay()
   y += MENU_ITEM_HEIGHT + 2;
 
 #if (LCD_ROTATE % 2 == 0)
-  ftoa(buf, A.temperature, 1);
+  ftoa(buf, Tc[0].temperature, 1);
   tft.setCursor((TFT_WIDTH >> 1) - (6 * strlen(buf)) - 12 - 24, y + 2);
 #else
   tft.setCursor(2, y);
@@ -842,10 +845,10 @@ void updateProcessDisplay()
 #if (LCD_ROTATE % 2 == 0)
   tft.print("  ");  // clear any preceding crap
 #else
-  alignRightPrefix((int)A.temperature);
+  alignRightPrefix((int)Tc[0].temperature);
 #endif
 
-  displayThermocoupleData(&A);
+  displayThermocoupleData(&Tc[0]);
 
 #if (LCD_ROTATE % 2 == 0)
   tft.print("  ");  // clear any post crap
@@ -921,7 +924,7 @@ void updateProcessDisplay()
   tft.drawPixel(dx, dy, ST7735_BLUE);
 
   // actual temperature
-  dy = h - ((uint16_t)A.temperature * pxPerC / 100) + yOffset;
+  dy = h - ((uint16_t)Tc[0].temperature * pxPerC / 100) + yOffset;
   tft.drawPixel(dx, dy, ST7735_RED);
 
   // bottom line
@@ -1103,22 +1106,22 @@ void setup()
   digitalWrite(TCOUPLE2_CS, HIGH);
 
   // setup /CS line for thermocouple and read initial temperature
-  A.chipSelect = TCOUPLE1_CS;
-  pinMode(A.chipSelect, OUTPUT);
-  digitalWrite(A.chipSelect, HIGH);
+  Tc[0].chipSelect = TCOUPLE1_CS;
+  pinMode(Tc[0].chipSelect, OUTPUT);
+  digitalWrite(Tc[0].chipSelect, HIGH);
 
 #ifndef FAKE_HW
   readThermocouple(&A);
 
-  if (A.stat != 0) {
-    abortWithError(A.stat);
+  if (Tc[0].stat != 0) {
+    abortWithError(Tc[0].stat);
   }
 #endif
 
   // initialize moving average filter
-  runningTotalRampRate = A.temperature * NUMREADINGS;
+  runningTotalRampRate = Tc[0].temperature * NUMREADINGS;
   for(int i = 0; i < NUMREADINGS; i++) {
-    airTemp[i].temp = A.temperature;
+    airTemp[i].temp = Tc[0].temperature;
   }
 
 #ifdef WITH_CALIBRATION
@@ -1153,7 +1156,7 @@ void setup()
     int samples[8];
 
     total -= samples[i];
-    samples[i] = A.temperature; // new value
+    samples[i] = Tc[0].temperature; // new value
     total += samples[i];
 
     i = (i + 1) % 8; // next position
@@ -1299,7 +1302,7 @@ void loop(void)
 #ifndef FAKE_HW
     readThermocouple(&A); // should be sufficient to read it every 250ms or 500ms
     
-    if (A.stat > 0) {
+    if (Tc[0].stat > 0) {
       thermocoupleErrorCount++;
     }
     else {
@@ -1307,21 +1310,21 @@ void loop(void)
     }
 
     if (thermocoupleErrorCount > TC_ERROR_TOLERANCE) {
-      abortWithError(A.stat);
+      abortWithError(Tc[0].stat);
     }
 #else
-    A.temperature = encAbsolute;
+    Tc[0].temperature = encAbsolute;
 #endif
 
 #if 0 // verbose thermocouple error bits
     for (uint8_t mask = B111; mask; mask >>= 1) {
-      printAtPos(mask & A.stat ? '1' : '0', TFT_LEFTCOL, 40);
+      printAtPos(mask & Tc[0].stat ? '1' : '0', TFT_LEFTCOL, 40);
     }
 #endif
       
     // rolling average of the temp T1 and T2
     totalT1 -= readingsT1[index];       // subtract the last reading
-    readingsT1[index] = A.temperature;
+    readingsT1[index] = Tc[0].temperature;
     totalT1 += readingsT1[index];       // add the reading to the total
     index = (index + 1) % NUMREADINGS;  // next position
     averageT1 = totalT1 / NUMREADINGS;  // calculate the average temp
