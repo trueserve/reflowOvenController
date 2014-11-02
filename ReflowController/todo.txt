@@ -3,6 +3,9 @@ important
 [x] cycle display is not correct yet for vertical mode
 [x] make any direct pin access code portable
 [ ] fix bounds limits on settings (fan at -300%? lol)
+    [x] negative bounds fixed at 0%.
+    [ ] need to implement bounds limits between previously set values in profile editor
+    [ ] need to set sane upper limits on most settings
 [x] Show which profile is loaded, and load selected profile by default
     note: last profile was already loaded by default. just added the display.
 [x] Remove reliance on TimerThree in fake mode as mini and nano do not have timer3
@@ -16,13 +19,14 @@ low priority
              what to perform: go high, go low, pulse/hold for X seconds, etc
              data to perform: time to hold, delay to go high/low, etc
     why? beeper at action changes, beeper when done, solenoid when done to open door, etc
-[ ] reduce size to fit on a micro again
+[x] reduce size to fit on a micro again
 [/] Log (and show) completed and canceled run count with the oven, overall elapsed time run (aging?)
 [ ] Rework ST7735 module - KP's is bigger than Adafruit's when compiled?
     update 20141027: it's because he has inlined everything.
 [x] add eeprom checksum for firstrun support, rather than the weirdass read code that exists now
-[ ] replacing FP math with integer math where possible to save flash space
+[/] replacing FP math with integer math where possible to save flash space
 [ ] replace graph drawing routine drawPixel with drawLine
+[ ] 
 
 optional
 [ ] look into adding scrollbar, and maybe a scroll area border

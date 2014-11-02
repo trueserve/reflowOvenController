@@ -163,8 +163,8 @@ typedef struct profileValues_s {
   int16_t soakDuration;
   int16_t peakTemp;
   int16_t peakDuration;
-  double  rampUpRate;
-  double  rampDownRate;
+  int16_t rampUpRate;
+  int16_t rampDownRate;
 } Profile_t;
 
 #define MAX_PROFILES               30
@@ -325,52 +325,53 @@ bool menuDummy(const Menu::Action_t a)
   return true;
 }
 
-void getItemValuePointer(const Menu::Item_t *mi, double **d, int16_t **i)
+void * getItemValuePointer(const Menu::Item_t *mi)
 {
-  if (mi == &miRampUpRate)  *d = &activeProfile.rampUpRate;
-  if (mi == &miRampDnRate)  *d = &activeProfile.rampDownRate;
-  if (mi == &miSoakTime)    *i = &activeProfile.soakDuration;
-  if (mi == &miSoakTemp)    *i = &activeProfile.soakTemp;
-  if (mi == &miPeakTime)    *i = &activeProfile.peakDuration;
-  if (mi == &miPeakTemp)    *i = &activeProfile.peakTemp;
-  if (mi == &miPidSettingP) *d = &heaterPID.Kp;
-  if (mi == &miPidSettingI) *d = &heaterPID.Ki;
-  if (mi == &miPidSettingD) *d = &heaterPID.Kd; 
-  if (mi == &miFanSettings) *i = &fanAssistSpeed;
+  if (mi == &miRampUpRate)  return &activeProfile.rampUpRate;
+  if (mi == &miRampDnRate)  return &activeProfile.rampDownRate;
+  if (mi == &miSoakTime)    return &activeProfile.soakDuration;
+  if (mi == &miSoakTemp)    return &activeProfile.soakTemp;
+  if (mi == &miPeakTime)    return &activeProfile.peakDuration;
+  if (mi == &miPeakTemp)    return &activeProfile.peakTemp;
+  if (mi == &miPidSettingP) return &heaterPID.Kp;
+  if (mi == &miPidSettingI) return &heaterPID.Ki;
+  if (mi == &miPidSettingD) return &heaterPID.Kd; 
+  if (mi == &miFanSettings) return &fanAssistSpeed;
+  return NULL;
 }
 
 bool getItemValueLabel(const Menu::Item_t *mi, char *label)
 {
-  int16_t *iValue = NULL;
-  double  *dValue = NULL;
-  char *p;
+  char work[2];
+  void *val;
+
+  val = getItemValuePointer(mi);
   
-  getItemValuePointer(mi, &dValue, &iValue);
-
-  if (isRampSetting(mi) || isPidSetting(mi)) {
-    p = label;
-    ftoa(p, *dValue, (isPidSetting(mi)) ? 2 : 1); // need greater precision with pid values
-    p = label;
-    
-    if (isRampSetting(mi)) {
-      while(*p != '\0') p++;
-      *p++ = 0xf7; *p++ = 'C'; *p++ = '/'; *p++ = 's';
-      *p = '\0';
-    }
+  if (isPidSetting(mi)) {
+    ftoa(label, *(double *)val, 2); // need greater precision with pid values
   }
-  else {
-    if (mi == &miPeakTemp || mi == &miSoakTemp) {
-      itostr(label, *iValue, "\367C");
-    }
-    if (mi == &miPeakTime || mi == &miSoakTime) {
-      itostr(label, *iValue, "s");
-    }
-    if (mi == &miFanSettings) {
-      itostr(label, *iValue, "%");
-    }
+  if (isRampSetting(mi)) {
+    // set integer
+    itoa10((*((int16_t *)val) / 10), label, 1);
+    // set decimal
+    work[0] = (*((int16_t *)val) % 10) + 0x30;
+    work[1] = 0x00;
+    strcat(label, ".");
+    strcat(label, work);
+    // set degC/s
+    strcat(label, "\367C/s");
+  }
+  if (mi == &miPeakTemp || mi == &miSoakTemp) {
+    itostr(label, *(int16_t *)val, "\367C");
+  }
+  if (mi == &miPeakTime || mi == &miSoakTime) {
+    itostr(label, *(int16_t *)val, "s");
+  }
+  if (mi == &miFanSettings) {
+    itostr(label, *(int16_t *)val, "%");
   }
 
-  return dValue || iValue;
+  return val;
 }
 
 bool editNumericalValue(const Menu::Action_t action)
@@ -404,29 +405,36 @@ bool editNumericalValue(const Menu::Action_t action)
 
     tft.setTextColor(ST7735_WHITE, ST7735_RED);
 
-    int16_t *iValue = NULL;
-    double  *dValue = NULL;
-    getItemValuePointer(Engine.currentItem, &dValue, &iValue);
+    void *val;
+    val = getItemValuePointer(Engine.currentItem);
 
-    if (isRampSetting(Engine.currentItem) || isPidSetting(Engine.currentItem)) {
+    // none of the items we can edit happen to go negative.
+    encAbsolute = (encAbsolute < 0) ? 0 : encAbsolute;
+    
+    if (isPidSetting(Engine.currentItem)) {      
       double tmp;
-      double factor = (isPidSetting(Engine.currentItem)) ? 100 : 10;
-      
       if (initial) {
-        tmp = *dValue;
-        tmp *= factor;
+        tmp = *(double *)val;
+        tmp *= 100;
         encAbsolute = (int16_t)tmp;
       }
       else {
         tmp = encAbsolute;
-        tmp /= factor;
-        *dValue = tmp;
+        tmp /= 100;
+        *(double *)val = tmp;
       }      
     }
     else {
-      if (initial) encAbsolute = *iValue;
-      else *iValue = encAbsolute;
+      if (initial) encAbsolute = *(int16_t *)val;
+      else *(int16_t *)val = encAbsolute;
     }
+    
+    // TODO: clamp upper values
+    /*
+    switch (Engine.currentItem) {
+      case  
+    }
+    */
 
     getItemValueLabel(Engine.currentItem, buf);
     tft.print(buf);
@@ -1168,6 +1176,7 @@ void updateRampSetpoint(bool down = false)
 {
   if (zeroCrossTicks > lastRampTicks + MS_PER_SINE) {
     double rate = (down) ? activeProfile.rampDownRate : activeProfile.rampUpRate;
+    rate /= 10;
     Setpoint += (rate / MS_PER_SINE * (zeroCrossTicks - lastRampTicks)) * ((down) ? -1 : 1);
     lastRampTicks = zeroCrossTicks;
   }
@@ -1607,8 +1616,8 @@ void makeDefaultProfile()
   activeProfile.soakDuration =  75;
   activeProfile.peakTemp     = 235;
   activeProfile.peakDuration =  45;
-  activeProfile.rampUpRate   =   0.90;
-  activeProfile.rampDownRate =   1.80;
+  activeProfile.rampUpRate   =   9;
+  activeProfile.rampDownRate =  18;
 }
 
 void factoryReset()
