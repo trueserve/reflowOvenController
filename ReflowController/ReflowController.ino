@@ -1111,7 +1111,7 @@ void setup()
   digitalWrite(Tc[0].chipSelect, HIGH);
 
 #ifndef FAKE_HW
-  readThermocouple(&A);
+  readThermocouple(&Tc[0]);
 
   if (Tc[0].stat != 0) {
     abortWithError(Tc[0].stat);
@@ -1300,7 +1300,7 @@ void loop(void)
     lastUpdate = zeroCrossTicks;
 
 #ifndef FAKE_HW
-    readThermocouple(&A); // should be sufficient to read it every 250ms or 500ms
+    readThermocouple(&Tc[0]); // should be sufficient to read it every 250ms or 500ms
     
     if (Tc[0].stat > 0) {
       thermocoupleErrorCount++;
