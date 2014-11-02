@@ -796,13 +796,9 @@ void updateProcessDisplay()
   uint16_t dx, dy;
   uint8_t y = 2;
   double tmp;
-  
+
 #if (GRAPH_STOP_ON_DONE == 1)
   static uint8_t completed = 0;
-  if (currentState == Complete) {
-    if (completed == 1) return;
-    completed = 1;
-  }
 #endif
 
   // header & initial view
@@ -859,11 +855,18 @@ void updateProcessDisplay()
   }
 
   // elapsed time
-  uint16_t elapsed = (zeroCrossTicks - startCycleZeroCrossTicks) / (LINE_FREQ * 2);
+  uint16_t elapsed;
+#if (GRAPH_STOP_ON_DONE == 1)
+  if (!completed) {
+#endif
+  elapsed = (zeroCrossTicks - startCycleZeroCrossTicks) / (LINE_FREQ * 2);
   tft.setCursor(TFT_WIDTH - 24, y);
   alignRightPrefix(elapsed); 
   tft.print(elapsed);
   tft.print("s");
+#if (GRAPH_STOP_ON_DONE == 1)
+  }
+#endif
 
   y += MENU_ITEM_HEIGHT + 2;
 
@@ -889,6 +892,13 @@ void updateProcessDisplay()
 
 #if (LCD_ROTATE % 2 == 0)
   tft.print("  ");  // clear any post crap
+#endif
+
+#if (GRAPH_STOP_ON_DONE == 1)
+  if (currentState == Complete) {
+    if (completed == 1) return;
+    completed = 1;
+  }
 #endif
 
   tft.setTextSize(1);

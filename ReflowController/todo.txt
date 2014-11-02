@@ -9,7 +9,7 @@ important
 [x] Show which profile is loaded, and load selected profile by default
     note: last profile was already loaded by default. just added the display.
 [x] Remove reliance on TimerThree in fake mode as mini and nano do not have timer3
-[ ] Compile-time removal of graph looping support
+[ ] Show time remaining for each timed process step (soak, peak)
 
 low priority
 [x] fix text leaving crap behind when redrawn, stale text after canceling load/save profile
