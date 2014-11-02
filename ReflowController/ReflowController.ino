@@ -894,14 +894,14 @@ void updateProcessDisplay()
   tft.print("  ");  // clear any post crap
 #endif
 
+  tft.setTextSize(1);
+  
 #if (GRAPH_STOP_ON_DONE == 1)
   if (currentState == Complete) {
     if (completed == 1) return;
     completed = 1;
   }
 #endif
-
-  tft.setTextSize(1);
 
 #ifndef PIDTUNE
   // current state
