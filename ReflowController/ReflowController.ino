@@ -12,12 +12,15 @@
 #define ENC_STEPS_PER_NOTCH 4   // steps per notch of the rotary encoder. to cal: set to 1, turn knob slowly, count
 
 #define LCD_ROTATE          2   // 0 or 2 = vertical, 1 or 3 = horizontal
-#define LCD_TABTYPE         INITR_BLACKTAB  // lcd type, usually INITR_RED/GREEN/BLACKTAB
+#define LCD_TABTYPE         INITR_BLACKTAB   // lcd type, usually INITR_RED/GREEN/BLACKTAB
+
+#define NAMED_PROFILES      1   // 1 = allow named profiles, 0 = numbers only
 
 #define IDLE_SAFE_TEMP      50  // temp in degC that the oven is considered safe/done cooling
 
-#define GRAPH_DRAW_LINES    0   // 0 = use pixels (sometimes has gaps), 1 = use lines (no gaps, nicer). +~100bytes
-#define GRAPH_STOP_ON_DONE  1   // 0 = keep looping graph after done, 1 = stop timer/graphing after idle safe temp reached. +42bytes
+//#define GRAPH_DRAW_LINES    1   // unset = draw with pixels (sometimes has gaps), set = draw with lines (no gaps, nicer). +102bytes
+//#define GRAPH_HAS_TEMPS     1   // unset = nothing, set = print temperature values on right edge of graph line. +74bytes
+//#define GRAPH_STOP_ON_DONE  1   // unset = keep looping graph after done, set = stop timer/graphing after idle safe temp reached. +42bytes
 
 //#define FAKE_HW             1
 //#define PIDTUNE             1   // autotune wouldn't fit in the 28k available on my arduino pro micro.
@@ -135,7 +138,7 @@ uint32_t startCycleZeroCrossTicks;
 uint32_t lastUpdate              = 0;
 uint32_t lastDisplayUpdate       = 0;
 
-#if (GRAPH_STOP_ON_DONE == 1)
+#ifdef GRAPH_STOP_ON_DONE
   static bool processCompleted = false;
 #endif
 
@@ -200,6 +203,9 @@ int16_t fanAssistSpeed = 33; // default fan speed
 // --UI------------------------------------------------------------------------
 // NB: Adafruit GFX ASCII-Table is bogous:
 //     https://github.com/adafruit/Adafruit-GFX-Library/issues/22
+
+#define ST7735_LTGRAY       0xe71c
+#define ST7735_STDGRAY      0x9492
 
 Adafruit_ST7735 tft = Adafruit_ST7735(LCD_CS, LCD_DC, LCD_RST);
 
@@ -503,7 +509,9 @@ bool cycleStart(const Menu::Action_t action)
 #endif
     initialProcessDisplay = false;
     menuUpdateRequest = false;
+#ifdef GRAPH_STOP_ON_DONE
     processCompleted = false;
+#endif
   }
 
   return true;
@@ -796,7 +804,7 @@ void updateProcessDisplay()
 
   static uint8_t lastState = 0;
 
-#if (GRAPH_DRAW_LINES == 1)
+#ifdef GRAPH_DRAW_LINES
   static uint16_t old_dx, old_dy_sp, old_dy_tc;
 #endif
 
@@ -837,14 +845,25 @@ void updateProcessDisplay()
     tmp = w / tmp * 10.0; 
     pxPerS = (uint16_t)tmp;
 
-    // 50°C grid horizontal
+    // 50°C grid lines horizontal
     int16_t t = (uint16_t)(activeProfile.peakTemp * 1.10);
     for (uint16_t tg = 0; tg < t; tg += 50) {
-      uint16_t l = h - (tg * pxPerC / 100) + yOffset;
-      tft.drawFastHLine(0, l, TFT_WIDTH, tft.Color565(0xe0, 0xe0, 0xe0));
+      uint16_t line = h - (tg * pxPerC / 100) + yOffset;
+      tft.drawFastHLine(0, line, TFT_WIDTH, ST7735_LTGRAY);
+#ifdef GRAPH_HAS_TEMPS
+      uint8_t xshift;
+      if (tg > 0) {
+        itoa10(tg, buf, 1);
+        xshift = (tg == 50) ? 6 : 0;
+  
+        tft.setTextColor(ST7735_STDGRAY, ST7735_WHITE);      
+        printAtPos(buf, TFT_WIDTH - (6 * 4) - 4 + xshift, line - 3);   // lcdwidth - 4 digits - right side buffer + maybe 1 digit
+        // tft.print("\367");
+      }
+#endif
     }
 
-#if (GRAPH_DRAW_LINES == 1)    
+#ifdef GRAPH_DRAW_LINES    
     old_dx = 0;
     old_dy_sp = old_dy_tc = TFT_HEIGHT - 11;
 #endif
@@ -859,7 +878,7 @@ void updateProcessDisplay()
 
   // elapsed time
   uint16_t elapsed;
-#if (GRAPH_STOP_ON_DONE == 1)
+#ifdef GRAPH_STOP_ON_DONE
   if (processCompleted == false) {
 #endif
   elapsed = (zeroCrossTicks - startCycleZeroCrossTicks) / (LINE_FREQ * 2);
@@ -867,7 +886,7 @@ void updateProcessDisplay()
   alignRightPrefix(elapsed); 
   tft.print(elapsed);
   tft.print("s");
-#if (GRAPH_STOP_ON_DONE == 1)
+#ifdef GRAPH_STOP_ON_DONE
   }
 #endif
 
@@ -899,7 +918,7 @@ void updateProcessDisplay()
 
   tft.setTextSize(1);
   
-#if (GRAPH_STOP_ON_DONE == 1)
+#ifdef GRAPH_STOP_ON_DONE
   if (currentState == Complete) {
     if (processCompleted == true) return;
     processCompleted = true;
@@ -971,7 +990,7 @@ void updateProcessDisplay()
 
   // temperature setpoint
   dy = h - ((uint16_t)Setpoint * pxPerC / 100) + yOffset;
-#if (GRAPH_DRAW_LINES == 1)
+#ifdef GRAPH_DRAW_LINES
   tft.drawLine(old_dx, old_dy_sp, dx, dy, ST7735_BLUE);
   old_dy_sp = dy;
 #else
@@ -980,7 +999,7 @@ void updateProcessDisplay()
 
   // actual temperature
   dy = h - ((uint16_t)tc[0].temperature * pxPerC / 100) + yOffset;
-#if (GRAPH_DRAW_LINES == 1)
+#ifdef GRAPH_DRAW_LINES
   tft.drawLine(old_dx, old_dy_tc, dx, dy, ST7735_RED);
   old_dy_tc = dy;
   old_dx = dx;
