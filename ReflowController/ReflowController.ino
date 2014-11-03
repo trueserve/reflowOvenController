@@ -141,10 +141,6 @@ uint32_t lastDisplayUpdate       = 0;
 
 char buf[20]; // generic char buffer
 
-#define TC_ERROR_TOLERANCE         5  // allow for n consecutive errors before bailing out
-
-Thermocouple Tc[2];
-
 
 // --PID-----------------------------------------------------------------------
 uint8_t fanValue;
@@ -541,7 +537,7 @@ void renderMenuItem(const Menu::Item_t *mi, uint8_t pos)
 
   // mark items that have children
   if (Engine.getChild(mi) != &Menu::NullItem) {
-    tft.print(FS(" \x10   ")); // 0x10 -> filled right arrow
+    tft.print(FS(" \x10  ")); // 0x10 -> filled right arrow
   }
 
   currentlyRenderedItems[pos].mi = mi;
@@ -577,23 +573,29 @@ MenuItem(miFactoryReset, "Factory Reset", Menu::NullItem, miPidSettings, miEdita
 
 
 // --TC------------------------------------------------------------------------
-#define NUMREADINGS 10
+#define TC_COUNT                 2
+#define TC_NUMREADINGS           10
+#define TC_ERROR_TOLERANCE       5  // allow for n consecutive errors before bailing out
 
 typedef struct {
   double temp;
   uint16_t ticks;
 } Temp_t;
 
-Temp_t airTemp[NUMREADINGS];
+typedef struct {
+  double readings[TC_NUMREADINGS];
+  double total;
+  double average;
+} TempLog_t;
 
-double readingsT1[NUMREADINGS]; // the readings used to make a stable temp rolling average
+Temp_t airTemp[TC_NUMREADINGS];
+
 double runningTotalRampRate;
 double rampRate = 0;
-double rateOfRise = 0;          // the result that is displayed
-double totalT1 = 0;             // the running total
-double averageT1 = 0;           // the average
-uint8_t index = 0;              // the index of the current reading
 
+Thermocouple tc[TC_COUNT];
+TempLog_t tcLog[TC_COUNT];
+uint8_t tcIndex = 0;                // the index of the current reading
 
 // --SSR-----------------------------------------------------------------------
 // Ensure that relay outputs are off (low) when starting
@@ -872,7 +874,7 @@ void updateProcessDisplay()
   y += MENU_ITEM_HEIGHT + 2;
 
 #if (LCD_ROTATE % 2 == 0)
-  ftoa(buf, Tc[0].temperature, 1);
+  ftoa(buf, tc[0].temperature, 1);
   tft.setCursor((TFT_WIDTH >> 1) - (6 * strlen(buf)) - 12 - 24, y + 2);
 #else
   tft.setCursor(2, y);
@@ -886,10 +888,10 @@ void updateProcessDisplay()
 #if (LCD_ROTATE % 2 == 0)
   tft.print("  ");  // clear any preceding crap
 #else
-  alignRightPrefix((int)Tc[0].temperature);
+  alignRightPrefix((int)tc[0].temperature);
 #endif
 
-  displayThermocoupleData(&Tc[0]);
+  displayThermocoupleData(&tc[0]);
 
 #if (LCD_ROTATE % 2 == 0)
   tft.print("  ");  // clear any post crap
@@ -977,7 +979,7 @@ void updateProcessDisplay()
 #endif
 
   // actual temperature
-  dy = h - ((uint16_t)Tc[0].temperature * pxPerC / 100) + yOffset;
+  dy = h - ((uint16_t)tc[0].temperature * pxPerC / 100) + yOffset;
 #if (GRAPH_DRAW_LINES == 1)
   tft.drawLine(old_dx, old_dy_tc, dx, dy, ST7735_RED);
   old_dy_tc = dy;
@@ -1160,27 +1162,28 @@ void setup()
  #endif
 #endif
 
-  // disable second TC; not used yet
-  pinMode(TCOUPLE2_CS, OUTPUT);
-  digitalWrite(TCOUPLE2_CS, HIGH);
-
   // setup /CS line for thermocouple and read initial temperature
-  Tc[0].chipSelect = TCOUPLE1_CS;
-  pinMode(Tc[0].chipSelect, OUTPUT);
-  digitalWrite(Tc[0].chipSelect, HIGH);
+  tc[0].chipSelect = TCOUPLE1_CS;
+  digitalWrite(TCOUPLE1_CS, HIGH);
+  pinMode(TCOUPLE1_CS, OUTPUT);
+
+  // disable second TC; not used yet
+  tc[1].chipSelect = TCOUPLE2_CS;
+  digitalWrite(TCOUPLE2_CS, HIGH);
+  pinMode(TCOUPLE2_CS, OUTPUT);
 
 #ifndef FAKE_HW
-  readThermocouple(&Tc[0]);
+  readThermocouple(&tc[0]);
 
-  if (Tc[0].stat != 0) {
-    abortWithError(Tc[0].stat);
+  if (tc[0].stat != 0) {
+    abortWithError(tc[0].stat);
   }
 #endif
 
   // initialize moving average filter
-  runningTotalRampRate = Tc[0].temperature * NUMREADINGS;
-  for(int i = 0; i < NUMREADINGS; i++) {
-    airTemp[i].temp = Tc[0].temperature;
+  runningTotalRampRate = tc[0].temperature * TC_NUMREADINGS;
+  for(int i = 0; i < TC_NUMREADINGS; i++) {
+    airTemp[i].temp = tc[0].temperature;
   }
 
 #ifdef WITH_CALIBRATION
@@ -1215,7 +1218,7 @@ void setup()
     int samples[8];
 
     total -= samples[i];
-    samples[i] = Tc[0].temperature; // new value
+    samples[i] = tc[0].temperature; // new value
     total += samples[i];
 
     i = (i + 1) % 8; // next position
@@ -1360,9 +1363,9 @@ void loop(void)
     lastUpdate = zeroCrossTicks;
 
 #ifndef FAKE_HW
-    readThermocouple(&Tc[0]); // should be sufficient to read it every 250ms or 500ms
+    readThermocouple(&tc[0]); // should be sufficient to read it every 250ms or 500ms
     
-    if (Tc[0].stat > 0) {
+    if (tc[0].stat > 0) {
       thermocoupleErrorCount++;
     }
     else {
@@ -1370,42 +1373,43 @@ void loop(void)
     }
 
     if (thermocoupleErrorCount > TC_ERROR_TOLERANCE) {
-      abortWithError(Tc[0].stat);
+      abortWithError(tc[0].stat);
     }
 #else
-    Tc[0].temperature = encAbsolute;
+    tc[0].temperature = encAbsolute;
 #endif
 
 #if 0 // verbose thermocouple error bits
     for (uint8_t mask = B111; mask; mask >>= 1) {
-      printAtPos(mask & Tc[0].stat ? '1' : '0', TFT_LEFTCOL, 40);
+      printAtPos(mask & tc[0].stat ? '1' : '0', TFT_LEFTCOL, 40);
     }
 #endif
       
     // rolling average of the temp T1 and T2
-    totalT1 -= readingsT1[index];       // subtract the last reading
-    readingsT1[index] = Tc[0].temperature;
-    totalT1 += readingsT1[index];       // add the reading to the total
-    index = (index + 1) % NUMREADINGS;  // next position
-    averageT1 = totalT1 / NUMREADINGS;  // calculate the average temp
+    tcLog[0].total -= tcLog[0].readings[tcIndex];        // subtract the last reading
+    tcLog[0].readings[tcIndex] = tc[0].temperature;      // copy the temperature
+    tcLog[0].total += tcLog[0].readings[tcIndex];        // add the reading to the total
+    tcIndex = (tcIndex + 1) % TC_NUMREADINGS;            // next position
+    tcLog[0].average = tcLog[0].total / TC_NUMREADINGS;  // calculate the average temp
 
     // need to keep track of a few past readings in order to work out rate of rise
-    for (int i = 1; i < NUMREADINGS; i++) { // iterate over all previous entries, moving them backwards one index
+    for (int i = 1; i < TC_NUMREADINGS; i++) { // iterate over all previous entries, moving them backwards one index
       airTemp[i - 1].temp = airTemp[i].temp;
       airTemp[i - 1].ticks = airTemp[i].ticks;     
     }
 
-    airTemp[NUMREADINGS - 1].temp = averageT1; // update the last index with the newest average
-    airTemp[NUMREADINGS - 1].ticks = deltaT;
+    airTemp[TC_NUMREADINGS - 1].temp = tcLog[0].average; // update the last index with the newest average
+    airTemp[TC_NUMREADINGS - 1].ticks = deltaT;
 
     // calculate rate of temperature change
     uint32_t collectTicks;
-    for (int i = 0; i < NUMREADINGS; i++) {
+    for (int i = 0; i < TC_NUMREADINGS; i++) {
       collectTicks += airTemp[i].ticks;
     }
-    rampRate = (airTemp[NUMREADINGS - 1].temp - airTemp[0].temp) / collectTicks * MS_PER_SINE;
 
-    Input = airTemp[NUMREADINGS - 1].temp; // update the variable the PID reads
+    rampRate = (airTemp[TC_NUMREADINGS - 1].temp - airTemp[0].temp) / collectTicks * MS_PER_SINE;
+
+    Input = airTemp[TC_NUMREADINGS - 1].temp; // update the variable the PID reads
 
     // display update
     if (zeroCrossTicks - lastDisplayUpdate > 33) {
@@ -1425,7 +1429,7 @@ void loop(void)
           PID.SetMode(AUTOMATIC);
           PID.SetControllerDirection(DIRECT);
           PID.SetTunings(heaterPID.Kp, heaterPID.Ki, heaterPID.Kd);
-          Setpoint = airTemp[NUMREADINGS - 1].temp;
+          Setpoint = airTemp[TC_NUMREADINGS - 1].temp;
         }
 
         updateRampSetpoint();
