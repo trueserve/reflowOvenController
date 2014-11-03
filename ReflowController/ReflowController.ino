@@ -187,9 +187,9 @@ typedef struct profileValues_s {
 
 #define MAX_PROFILES               30
 Profile_t activeProfile; // the one and only instance
-int activeProfileId = 0;
+uint8_t activeProfileId = 0;
 
-int16_t fanAssistSpeed = 33; // default fan speed
+uint8_t fanAssistSpeed = 33; // default fan speed
 
 // EEPROM offsets
 #define E2OFFSET_PID_CONFIG         (void *)    (E2END - 16 - sizeof(PID_t))  // sizeof(PID_t)
@@ -303,9 +303,21 @@ void printDouble(double val, uint8_t precision = 1)
   tft.print(buf);
 }
 
+void printAtPos(const __FlashStringHelper *str, uint8_t x, uint8_t y)
+{
+  tft.setCursor(x, y);
+  tft.print(str);
+}
+
 void printAtPos(const char *str, uint8_t x, uint8_t y)
 {
   tft.setCursor(x, y);
+  tft.print(str);
+}
+
+void printCentered(const __FlashStringHelper *str, uint8_t y)
+{
+  tft.setCursor((TFT_WIDTH >> 1) - (strlen((const prog_char *)str) * (tft.getTextSize() * 3)), y);
   tft.print(str);
 }
 
@@ -389,7 +401,7 @@ bool getItemValueLabel(const Menu::Item_t *mi, char *label)
     itostr(label, *(int16_t *)val, "s");
   }
   if (mi == &miFanSettings) {
-    itostr(label, *(int16_t *)val, "%");
+    itostr(label, *(uint8_t *)val, "%");
   }
 
   return val;
@@ -488,7 +500,7 @@ bool editNumericalValue(const Menu::Action_t action)
 
 
 // --PROFILE PROTOTYPE---------------------------------------------------------
-void saveProfile(unsigned int targetProfile, bool quiet = false);
+void saveProfile(uint8_t targetProfile, bool quiet = false);
 bool saveLoadProfile(const Menu::Action_t action);
 bool factoryReset(const Menu::Action_t action);
 
@@ -782,10 +794,10 @@ void displayThermocoupleData(struct Thermocouple* input)
   switch (input->stat) {
     case 0:
       printDouble(input->temperature);
-      tft.print("\367C");
+      tft.print(FS("\367C"));
       break;
     case 1:
-      tft.print("---");
+      tft.print(FS("---"));
       break;
   }
 }
@@ -969,10 +981,10 @@ void updateProcessDisplay()
   tft.setCursor(94, y);
 #endif
 
-  tft.print("Sp:"); 
+  tft.print(FS("Sp:")); 
   alignRightPrefix((int)Setpoint); 
   printDouble(Setpoint);
-  tft.print("\367C  ");
+  tft.print(FS("\367C  "));
 
   // draw temperature curves
   //
@@ -1026,7 +1038,7 @@ void updateProcessDisplay()
     tft.print(" ");   // space is filled with negative sign otherwise
   }
   printDouble(rampRate);
-  tft.print("\367C/s    ");
+  tft.print(FS("\367C/s    "));
 }
 
 
@@ -1040,8 +1052,8 @@ bool factoryReset(const Menu::Action_t action)
 
     if (initial) { // TODO: add eyecandy: colors or icons
       tft.setTextColor(ST7735_BLACK, ST7735_WHITE);
-      printAtPos("Doubleclick to RESET", TFT_LEFTCOL, 80);
-      printAtPos("Click to cancel", TFT_LEFTCOL, 90);
+      printAtPos(FS("Doubleclick to RESET"), TFT_LEFTCOL, 80);
+      printAtPos(FS("Click to cancel"), TFT_LEFTCOL, 90);
     }
   }
   
@@ -1123,7 +1135,7 @@ void setup()
     loadParameters(0);
   } 
   else {
-    loadLastUsedProfile();
+    loadActiveProfileId();
   }
 
   tft.fillScreen(ST7735_WHITE);
@@ -1174,7 +1186,7 @@ void setup()
   TIFR2  = 0x00;         // clear all interrupt flags
   TIMSK2 = _BV(OCIE2A);  // enable compare match interrupt
   
-  TCCR2B = 0x07;  // enable, set prescaler /1024
+  TCCR2B = 0x07;         // enable, set prescaler /1024
  #elif defined(__AVR_ATmega32U4__)
   Timer3.initialize(MS_PER_SINE * FAKE_HW); // set speed multiplier by setting FAKE_HW to value
   Timer3.attachInterrupt(zeroCrossingIsr);
@@ -1600,7 +1612,7 @@ void memoryFeedbackScreen(uint8_t profileId, bool loading)
 
 
 // --EEPROM------------------------------------------------------------------
-void saveProfile(unsigned int targetProfile, bool quiet)
+void saveProfile(uint8_t targetProfile, bool quiet)
 {
 #ifndef PIDTUNE
   activeProfileId = targetProfile;
@@ -1614,14 +1626,14 @@ void saveProfile(unsigned int targetProfile, bool quiet)
 #endif
 }
 
-void loadProfile(unsigned int targetProfile)
+void loadProfile(uint8_t targetProfile)
 {
   memoryFeedbackScreen(targetProfile, true);
   loadParameters(targetProfile);
 
   // save in any way, as we have no undo
   activeProfileId = targetProfile;
-  saveLastUsedProfile();
+  saveActiveProfileId();
 
   delay(500);
 }
@@ -1718,9 +1730,7 @@ void factoryReset()
   savePID();
 
   activeProfileId = 0;
-  saveLastUsedProfile();
-  
-  UpdateChecksum();
+  saveActiveProfileId();
 
   delay(500);
 #endif
@@ -1733,7 +1743,7 @@ void loadFanSpeed()
 
 void saveFanSpeed()
 {
-  eeprom_write_byte(E2OFFSET_FAN_SPEED, (uint8_t)fanAssistSpeed & 0xff);
+  eeprom_write_byte(E2OFFSET_FAN_SPEED, fanAssistSpeed);
   UpdateChecksum();
 }
 
@@ -1747,14 +1757,14 @@ void saveRunCounter()
   // EEPROM.write( 
 }
 
-void loadLastUsedProfile()
+void loadActiveProfileId()
 {
   activeProfileId = eeprom_read_byte(E2OFFSET_PROFILE_NUMBER);
   loadParameters(activeProfileId);
 }
 
-void saveLastUsedProfile()
+void saveActiveProfileId()
 {
-  eeprom_write_byte(E2OFFSET_PROFILE_NUMBER, (uint8_t)activeProfileId & 0xff);
+  eeprom_write_byte(E2OFFSET_PROFILE_NUMBER, activeProfileId);
   UpdateChecksum();
 }
