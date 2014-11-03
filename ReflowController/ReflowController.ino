@@ -16,8 +16,8 @@
 
 #define IDLE_SAFE_TEMP      50  // temp in degC that the oven is considered safe/done cooling
 
-#define GRAPH_DRAW_LINES    0   // 0 = use pixels (sometimes has gaps), 1 = use lines (no gaps, nicer, ~100bytes larger code)
-#define GRAPH_STOP_ON_DONE  1   // 0 = keep looping graph after done, 1 = stop timer/graphing after idle safe temp reached
+#define GRAPH_DRAW_LINES    0   // 0 = use pixels (sometimes has gaps), 1 = use lines (no gaps, nicer). +~100bytes
+#define GRAPH_STOP_ON_DONE  1   // 0 = keep looping graph after done, 1 = stop timer/graphing after idle safe temp reached. +42bytes
 
 //#define FAKE_HW             1
 //#define PIDTUNE             1   // autotune wouldn't fit in the 28k available on my arduino pro micro.
@@ -134,6 +134,10 @@ volatile uint8_t  phaseCounter   = 0;
 uint32_t startCycleZeroCrossTicks;
 uint32_t lastUpdate              = 0;
 uint32_t lastDisplayUpdate       = 0;
+
+#if (GRAPH_STOP_ON_DONE == 1)
+  static bool processCompleted = false;
+#endif
 
 char buf[20]; // generic char buffer
 
@@ -503,6 +507,7 @@ bool cycleStart(const Menu::Action_t action)
 #endif
     initialProcessDisplay = false;
     menuUpdateRequest = false;
+    processCompleted = false;
   }
 
   return true;
@@ -797,10 +802,6 @@ void updateProcessDisplay()
   uint8_t y = 2;
   double tmp;
 
-#if (GRAPH_STOP_ON_DONE == 1)
-  static uint8_t completed = 0;
-#endif
-
   // header & initial view
   tft.setTextColor(ST7735_WHITE, ST7735_BLUE);
 
@@ -857,7 +858,7 @@ void updateProcessDisplay()
   // elapsed time
   uint16_t elapsed;
 #if (GRAPH_STOP_ON_DONE == 1)
-  if (!completed) {
+  if (processCompleted == false) {
 #endif
   elapsed = (zeroCrossTicks - startCycleZeroCrossTicks) / (LINE_FREQ * 2);
   tft.setCursor(TFT_WIDTH - 24, y);
@@ -898,8 +899,8 @@ void updateProcessDisplay()
   
 #if (GRAPH_STOP_ON_DONE == 1)
   if (currentState == Complete) {
-    if (completed == 1) return;
-    completed = 1;
+    if (processCompleted == true) return;
+    processCompleted = true;
   }
 #endif
 
