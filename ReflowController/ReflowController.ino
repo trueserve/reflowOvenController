@@ -247,7 +247,7 @@ typedef enum {
   RampToSoak = 10,
   Soak,
   RampUp,
-  Peak,
+  Reflow,
   RampDown,
   CoolDown,
 
@@ -965,7 +965,7 @@ void updateProcessDisplay()
       casePrintState(RampToSoak);
       casePrintState(Soak);
       casePrintState(RampUp);
-      casePrintState(Peak);
+      casePrintState(Reflow);
       casePrintState(RampDown);
       casePrintState(CoolDown);
       casePrintState(Complete);
@@ -1510,11 +1510,11 @@ void loop(void)
 
         if (Setpoint >= activeProfile.peakTemp - 1) {
           Setpoint = activeProfile.peakTemp;
-          currentState = Peak;
+          currentState = Reflow;
         }
         break;
 
-      case Peak:
+      case Reflow:
         if (stateChanged) {
           stateChanged = false;
           Setpoint = activeProfile.peakTemp;
