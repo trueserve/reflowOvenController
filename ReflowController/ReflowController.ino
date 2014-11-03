@@ -209,11 +209,11 @@ uint8_t fanAssistSpeed = 33; // default fan speed
 
 Adafruit_ST7735 tft = Adafruit_ST7735(LCD_CS, LCD_DC, LCD_RST);
 
-#if (LCD_ROTATE % 2 == 1)   // wide view
+#if (LCD_ROTATE % 2 == 1)   // landscape view
  #define TFT_LEFTCOL        10
  #define TFT_WIDTH          160
  #define TFT_HEIGHT         128
-#else                       // narrow view
+#else                       // portrait view
  #define TFT_LEFTCOL        4
  #define TFT_WIDTH          128
  #define TFT_HEIGHT         160
@@ -329,8 +329,8 @@ void printCentered(const char *str, uint8_t y)
 
 void alignRightPrefix(uint16_t v)
 {
-  if (v < 1e2) tft.print(' '); 
-  if (v < 1e1) tft.print(' ');
+  if (v < 1e2) tft.print(" "); 
+  if (v < 1e1) tft.print(" ");
 }
 
 bool isPidSetting(const Menu::Item_t *mi)
@@ -552,7 +552,7 @@ void renderMenuItem(const Menu::Item_t *mi, uint8_t pos)
 
   // show values if in-place editable items
   if (getItemValueLabel(mi, buf)) {
-    tft.print(' '); tft.print(buf); tft.print("   ");
+    tft.print(" "); tft.print(buf); tft.print("   ");
   }
 
   // mark items that have children
@@ -861,10 +861,14 @@ void updateProcessDisplay()
     int16_t t = (uint16_t)(activeProfile.peakTemp * 1.10);
     for (uint16_t tg = 0; tg < t; tg += 50) {
       uint16_t line = h - (tg * pxPerC / 100) + yOffset;
-      tft.drawFastHLine(0, line, TFT_WIDTH, ST7735_LTGRAY);
+      tft.drawFastHLine(0, line, TFT_WIDTH, (tg == 0) ? ST7735_STDGRAY : ST7735_LTGRAY);
 #ifdef GRAPH_HAS_TEMPS
       uint8_t xshift;
+#if (LCD_ROTATE % 2 == 1)   // landscape view
+      if (tg > 0 && tg != 250) {
+#else
       if (tg > 0) {
+#endif
         itoa10(tg, buf, 1);
         xshift = (tg == 50) ? 6 : 0;
   
@@ -1026,14 +1030,23 @@ void updateProcessDisplay()
   printAtPos("\xef", 2, y);
   alignRightPrefix((int)heaterValue); 
   tft.print((int)heaterValue);
-  tft.print('%');
+  tft.print("%");
 
-  tft.print(" \x2a");
+#if (LCD_ROTATE % 2 == 1)   // landscape view
+  tft.print(" ");
+#endif
+
+  tft.print(FS(" \x2a"));
   alignRightPrefix((int)fanValue); 
   tft.print((int)fanValue);
-  tft.print('%');
+  tft.print("%");
 
-  tft.print(" \x12"); // alternative: \x7f
+#if (LCD_ROTATE % 2 == 1)   // landscape view
+  // move last item to the right; looks nicer
+  tft.setCursor(TFT_WIDTH - (10 * 6), y);
+#endif
+
+  tft.print(FS(" \x12")); // alternative: \x7f
   if (rampRate >= 0) {
     tft.print(" ");   // space is filled with negative sign otherwise
   }
@@ -1356,11 +1369,17 @@ void loop(void)
   //
   if (menuUpdateRequest || menuUpdateLocal) {
     menuUpdateRequest = false;
-    if (currentState < UIMenuEnd && !encMovement && currentState != Edit && previousState != Edit) { // clear menu on child/parent navigation
+    
+    // clear menu on child/parent navigation
+    if (currentState < UIMenuEnd && !encMovement && currentState != Edit && previousState != Edit) {
       tft.fillScreen(ST7735_WHITE);
     }
 
+    // print menu entries
     Engine.render(renderMenuItem, MENU_ITEMS_VISIBLE);
+    
+    // separate menu entries from bottom area
+    tft.drawFastHLine(0, (MENU_ITEMS_VISIBLE * MENU_ITEM_HEIGHT), TFT_WIDTH, ST7735_LTGRAY);
 
     // are we navigating in a submenu? if so, print information on how to exit the submenu
     if (currentState == Settings) {
