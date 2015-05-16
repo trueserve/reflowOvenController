@@ -9,6 +9,9 @@
 #define BOARD_TYPE          1   // 0 = kp's design, 1 = true's design
 #define LINE_FREQ           60  // 50 or 60 supported
 
+#define HEATER_MODE         1   // 0 = wave packet, 1 = slower on/off
+#define FAN_MODE            1   // 0 = phase control, 1 = on/off control (fan does not support PC), 2 = wave packet
+
 #define ENC_STEPS_PER_NOTCH 4   // steps per notch of the rotary encoder. to cal: set to 1, turn knob slowly, count
 
 #define LCD_ROTATE          2   // 0 or 2 = vertical, 1 or 3 = horizontal
@@ -140,6 +143,7 @@ const char *ver = "3.1_tr02";
 // --GLOBALS-------------------------------------------------------------------
 volatile uint32_t timerTicks     = 0;
 volatile uint32_t zeroCrossTicks = 0;
+volatile uint8_t  heaterTicks    = 0;
 volatile uint8_t  fanTicks       = 0;
 volatile uint8_t  phaseCounter   = 0;
 
@@ -629,11 +633,15 @@ uint8_t tcIndex = 0;                // the index of the current reading
 // Ensure that relay outputs are off (low) when starting
 void setupRelayPins(void)
 {
+#if (INVERT_HEATER != 0)
+  digitalWrite(PIN_HEATER, HIGH);
 #else
   digitalWrite(PIN_HEATER, LOW);
 #endif
   pinMode(PIN_HEATER, OUTPUT);
   
+#if (INVERT_FAN != 0)
+  digitalWrite(PIN_FAN, HIGH);
 #else
   digitalWrite(PIN_FAN, LOW);
 #endif
@@ -704,6 +712,9 @@ void zeroCrossingIsr(void)
   if (--fanTicks == 0) {
     fanTicks = 25;
   }  
+  if (--heaterTicks == 0) {
+    heaterTicks = 50;
+  }
 
   // calculate wave packet parameters
   Channels[ch].state += Channels[ch].target;
@@ -749,7 +760,7 @@ void timerIsr(void)
   bool fanSet = (phaseCounter > Channels[CHANNEL_FAN].target) ? LOW : HIGH;
 #elif (FAN_MODE == 1)
   // toggling control for the fan, useful for picky fans and low code space
-  bool fanSet = ((fanValue >> 2) > fanTicks) ? LOW : HIGH;
+  bool fanSet = ((fanValue >> 2) >= fanTicks) ? LOW : HIGH;
 #elif (FAN_MODE == 2)
   // wave packet control for the fan, implemented because it works on my fan and phase control doesn't
   static uint32_t lastFanTicks = 0;
@@ -771,21 +782,26 @@ void timerIsr(void)
   digitalWrite(PIN_FAN, fanSet);
 #endif
   
-  
+#if (HEATER_MODE == 0)  
   // wave packet control for heater
+  static bool heaterSet;
   if (Channels[CHANNEL_HEATER].next > lastHtrTicks // FIXME: this loses ticks when overflowing
           && timerTicks > Channels[CHANNEL_HEATER].next)
   {
-    bool heaterSet = Channels[CHANNEL_HEATER].action ? HIGH : LOW;
-
+    heaterSet = Channels[CHANNEL_HEATER].action ? HIGH : LOW;
+    lastHtrTicks = timerTicks;
+  }
+#elif (HEATER_MODE == 1)
+  bool heaterSet = ((heaterValue >> 1) >= heaterTicks) ? LOW : HIGH;
+#else
+  #error ("Please set HEATER_MODE to 0 or 1");
+#endif
+ 
 #if (INVERT_HEATER != 0)
     digitalWrite(PIN_HEATER, !heaterSet);
 #else
     digitalWrite(PIN_HEATER, heaterSet);
 #endif
-
-    lastHtrTicks = timerTicks;
-  }
 
   
   // handle encoder + button
