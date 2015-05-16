@@ -1260,9 +1260,8 @@ void setup()
 
   loadFanSpeed();
   loadPID();
-
-  PID.SetOutputLimits(0, 100); // max output 100%
-  PID.SetMode(AUTOMATIC);
+  
+  PID.SetOutputLimits(0, 100);
 
   // mainline timer
   Timer1.initialize(TIMER1_ISR_CYCLE);
@@ -1575,9 +1574,11 @@ void loop(void)
           lastRampTicks = zeroCrossTicks;
           stateChanged = false;
           Output = 80;
-          PID.SetMode(AUTOMATIC);
+          
           PID.SetControllerDirection(DIRECT);
           PID.SetTunings(heaterPID.Kp, heaterPID.Ki, heaterPID.Kd);
+          PID.SetMode(AUTOMATIC);
+          
           Setpoint = airTemp[TC_NUMREADINGS - 1].temp;
         }
 
