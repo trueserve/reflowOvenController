@@ -139,7 +139,6 @@ volatile uint32_t timerTicks     = 0;
 volatile uint32_t zeroCrossTicks = 0;
 volatile uint8_t  phaseCounter   = 0;
 
-uint32_t startCycleZeroCrossTicks;
 uint32_t lastUpdate              = 0;
 uint32_t lastDisplayUpdate       = 0;
 
@@ -516,7 +515,7 @@ void toggleAutoTune();
 bool cycleStart(const Menu::Action_t action)
 {
   if (action == Menu::actionDisplay) {
-    startCycleZeroCrossTicks = zeroCrossTicks;
+    zeroCrossTicks = 0;
     menuExit(action);
 
 #ifndef PIDTUNE    
@@ -904,7 +903,7 @@ void updateProcessDisplay()
 #ifdef GRAPH_STOP_ON_DONE
   if (processCompleted == false) {
 #endif
-  elapsed = (zeroCrossTicks - startCycleZeroCrossTicks) / (LINE_FREQ * 2);
+  elapsed = (zeroCrossTicks) / (LINE_FREQ * 2);
   tft.setCursor(TFT_WIDTH - 24, y);
   alignRightPrefix(elapsed); 
   tft.print(elapsed);
