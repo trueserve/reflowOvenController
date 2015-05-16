@@ -1392,6 +1392,7 @@ uint8_t thermocoupleErrorCount;
 void loop(void) 
 {
   bool menuUpdateLocal = false;
+  static bool menuIsRoot = false;
   
   // --------------------------------------------------------------------------
   // handle encoder
@@ -1451,6 +1452,7 @@ void loop(void)
   //
   if (menuUpdateRequest || menuUpdateLocal) {
     menuUpdateRequest = false;
+    menuIsRoot = false;
     
     // clear menu on child/parent navigation
     if (currentState < UIMenuEnd && !encMovement && currentState != Edit && previousState != Edit) {
@@ -1473,6 +1475,8 @@ void loop(void)
       }
       else if (Engine.lastInvokedItem == &Menu::NullItem) {
         // we are at root menu; show the currently loaded profile
+        menuIsRoot = true;
+        
         printAtPos(FS("Using Profile "), TFT_LEFTCOL, 80);       
         tft.print(activeProfileId);
         
@@ -1487,7 +1491,8 @@ void loop(void)
 #ifdef SHOW_TEMP_MAIN_PAGE
   if (menuTempUpdateRequest) {
     menuTempUpdateRequest = false;
-    if (currentState == Settings && Engine.lastInvokedItem == &Menu::NullItem) {
+    if (currentState == Settings && menuIsRoot)
+    {
       tft.fillRect(TFT_LEFTCOL + 66, TFT_HEIGHT - 12, TFT_LEFTCOL + 96, TFT_HEIGHT - 6, ST7735_WHITE);
       tft.setCursor(TFT_LEFTCOL + 66, TFT_HEIGHT - 12);
       displayThermocoupleData(&tc[0]);
@@ -1820,10 +1825,10 @@ bool firstRun()
 void makeDefaultProfile()
 {
   activeProfile.soakTemp     = 145;
-  activeProfile.soakDuration =  75;
-  activeProfile.peakTemp     = 235;
+  activeProfile.soakDuration =  80;
+  activeProfile.peakTemp     = 240;
   activeProfile.peakDuration =  45;
-  activeProfile.rampUpRate   =   9;
+  activeProfile.rampUpRate   =   6;
   activeProfile.rampDownRate =  18;
 }
 
@@ -1844,9 +1849,6 @@ void factoryReset()
   fanAssistSpeed = 33;
   saveFanSpeed();
 
-  heaterPID.Kp =  0.60; 
-  heaterPID.Ki =  0.01;
-  heaterPID.Kd = 19.70;
   savePID();
 
   activeProfileId = 0;
