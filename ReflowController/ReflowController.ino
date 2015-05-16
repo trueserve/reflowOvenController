@@ -25,6 +25,8 @@
 #define GRAPH_HAS_TEMPS     1   // unset = nothing, set = print temperature values on right edge of graph line. +74bytes
 #define GRAPH_STOP_ON_DONE  1   // unset = keep looping graph after done, set = stop timer/graphing after idle safe temp reached. +42bytes
 
+#define SHOW_TEMP_MAIN_PAGE 1   // unset = no temp shown. set = temp shown. +138bytes
+
 #define INVERT_HEATER       1   // invert heater pin
 #define INVERT_FAN          1   // invert fan pin
 
@@ -245,6 +247,10 @@ int16_t encLastAbsolute = -1;
 
 bool menuUpdateRequest = true;
 bool initialProcessDisplay = false;
+
+#ifdef SHOW_TEMP_MAIN_PAGE
+  bool menuTempUpdateRequest;
+#endif
 
 
 // --STATE MACHINE-------------------------------------------------------------
@@ -704,17 +710,26 @@ void zeroCrossingIsr(void)
 {
   static uint8_t ch = 0;
 
+  zeroCrossTicks++;
+    
   // reset phase control timer
   phaseCounter = 0;
   TCNT1 = 0;
   
-  zeroCrossTicks++;
+  // update mode 1 tick counters
   if (--fanTicks == 0) {
     fanTicks = 25;
   }  
   if (--heaterTicks == 0) {
     heaterTicks = 50;
   }
+  
+  // update root menu temperature display
+#ifdef SHOW_TEMP_MAIN_PAGE
+  if ((uint8_t)zeroCrossTicks == 0) {
+    menuTempUpdateRequest = true; 
+  }
+#endif
 
   // calculate wave packet parameters
   Channels[ch].state += Channels[ch].target;
@@ -1461,10 +1476,25 @@ void loop(void)
         // we are at root menu; show the currently loaded profile
         printAtPos(FS("Using Profile "), TFT_LEFTCOL, 80);       
         tft.print(activeProfileId);
-
+        
+#ifdef SHOW_TEMP_MAIN_PAGE
+        // also show oven temp line
+        printAtPos(FS("Oven Temp: "), TFT_LEFTCOL, TFT_HEIGHT - 12);
+#endif
       }
     }
   }
+  
+#ifdef SHOW_TEMP_MAIN_PAGE
+  if (menuTempUpdateRequest) {
+    menuTempUpdateRequest = false;
+    if (currentState == Settings && Engine.lastInvokedItem == &Menu::NullItem) {
+      tft.fillRect(TFT_LEFTCOL + 66, TFT_HEIGHT - 12, TFT_LEFTCOL + 96, TFT_HEIGHT - 6, ST7735_WHITE);
+      tft.setCursor(TFT_LEFTCOL + 66, TFT_HEIGHT - 12);
+      displayThermocoupleData(&tc[0]);
+    }
+  }
+#endif
 
   // --------------------------------------------------------------------------
   // track state changes
