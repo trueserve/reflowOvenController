@@ -72,9 +72,9 @@ const char *ver = "3.1_tr02";
 #define TIMER1_ISR_CYCLE      600     // usec per timer1 tick. DEFAULT_LOOP_DELAY depends on this. fyi, TimerOne runs in mode 8.
                                       // at 600, we are divisible by 100 or 120, and get a counter value of 4800, prescale 1.
 
-#define MS_PER_SINE           (double)(5000 / LINE_FREQ)     // 50Hz mains is 10ms per sinusoid; 60Hz is 8.333
+#define SINES_PER_SEC         (LINE_FREQ * 2)
 
-#define DEFAULT_LOOP_DELAY    (uint16_t)((MS_PER_SINE * 100) / TIMER1_ISR_CYCLE) / 2     // 50Hz = 16.6, 60Hz = 13.3
+#define DEFAULT_LOOP_DELAY    (((1000000 / 600) / SINES_PER_SEC) / 2)     // 50Hz = 16.6, 60Hz = 13.3
 
 
 // --CLICK ENCODER-------------------------------------------------------------
@@ -752,7 +752,7 @@ void timerIsr(void)
   
 #if (FAN_MODE == 0)
   // phase control for the fan 
-  phaseCounter += (TIMER1_ISR_CYCLE / (LINE_FREQ * 2));
+  phaseCounter += (TIMER1_ISR_CYCLE / SINES_PER_SEC);
   if (phaseCounter > 90) {
     phaseCounter = 0;
   }
@@ -965,7 +965,7 @@ void updateProcessDisplay()
 #ifdef GRAPH_STOP_ON_DONE
   if (processCompleted == false) {
 #endif
-  elapsed = (zeroCrossTicks) / (LINE_FREQ * 2);
+  elapsed = zeroCrossTicks / SINES_PER_SEC;
   tft.setCursor(TFT_WIDTH - 24, y);
   alignRightPrefix(elapsed); 
   tft.print(elapsed);
@@ -1262,14 +1262,14 @@ void setup()
   TCCR2B = 0x00;         // disable timer2
   TCCR2A = 0x02;         // set as CTC timer
   TCNT2  = 0x00;         // reset counter
-  OCR2A  = (15625 / (LINE_FREQ * 2));
+  OCR2A  = (15625 / SINES_PER_SEC);
 
   TIFR2  = 0x00;         // clear all interrupt flags
   TIMSK2 = _BV(OCIE2A);  // enable compare match interrupt
   
   TCCR2B = 0x07;         // enable, set prescaler /1024
  #elif defined(__AVR_ATmega32U4__)
-  Timer3.initialize(MS_PER_SINE * FAKE_HW); // set speed multiplier by setting FAKE_HW to value
+  Timer3.initialize(SINES_PER_SEC * FAKE_HW); // set speed multiplier by setting FAKE_HW to value
   Timer3.attachInterrupt(zeroCrossingIsr);
  #endif
 #endif
@@ -1341,10 +1341,10 @@ uint32_t lastRampTicks;
 
 void updateRampSetpoint(bool down = false)
 {
-  if (zeroCrossTicks > lastRampTicks + MS_PER_SINE) {
+  if (zeroCrossTicks > lastRampTicks + SINES_PER_SEC) {
     double rate = (down) ? activeProfile.rampDownRate : activeProfile.rampUpRate;
     rate /= 10;
-    Setpoint += (rate / MS_PER_SINE * (zeroCrossTicks - lastRampTicks)) * ((down) ? -1 : 1);
+    Setpoint += (rate / SINES_PER_SEC * (zeroCrossTicks - lastRampTicks)) * ((down) ? -1 : 1);
     lastRampTicks = zeroCrossTicks;
   }
 }
@@ -1526,7 +1526,7 @@ void loop(void)
       collectTicks += airTemp[i].ticks;
     }
 
-    rampRate = (airTemp[TC_NUMREADINGS - 1].temp - airTemp[0].temp) / collectTicks * MS_PER_SINE;
+    rampRate = (airTemp[TC_NUMREADINGS - 1].temp - airTemp[0].temp) / collectTicks * SINES_PER_SEC;
 
     Input = airTemp[TC_NUMREADINGS - 1].temp; // update the variable the PID reads
 
@@ -1564,7 +1564,7 @@ void loop(void)
           Setpoint = activeProfile.soakTemp;
         }
 
-        if (zeroCrossTicks - stateChangedTicks >= (uint32_t)activeProfile.soakDuration * MS_PER_SINE) {
+        if (zeroCrossTicks - stateChangedTicks >= (uint32_t)activeProfile.soakDuration * SINES_PER_SEC) {
           currentState = RampUp;
         }
         break;
@@ -1589,7 +1589,7 @@ void loop(void)
           Setpoint = activeProfile.peakTemp;
         }
 
-        if (zeroCrossTicks - stateChangedTicks >= (uint32_t)activeProfile.peakDuration * MS_PER_SINE) {
+        if (zeroCrossTicks - stateChangedTicks >= (uint32_t)activeProfile.peakDuration * SINES_PER_SEC) {
           currentState = RampDown;
         }
         break;
