@@ -18,9 +18,9 @@
 
 #define IDLE_SAFE_TEMP      50  // temp in degC that the oven is considered safe/done cooling
 
-//#define GRAPH_DRAW_LINES    1   // unset = draw with pixels (sometimes has gaps), set = draw with lines (no gaps, nicer). +102bytes
-//#define GRAPH_HAS_TEMPS     1   // unset = nothing, set = print temperature values on right edge of graph line. +74bytes
-//#define GRAPH_STOP_ON_DONE  1   // unset = keep looping graph after done, set = stop timer/graphing after idle safe temp reached. +42bytes
+#define GRAPH_DRAW_LINES    1   // unset = draw with pixels (sometimes has gaps), set = draw with lines (no gaps, nicer). +102bytes
+#define GRAPH_HAS_TEMPS     1   // unset = nothing, set = print temperature values on right edge of graph line. +74bytes
+#define GRAPH_STOP_ON_DONE  1   // unset = keep looping graph after done, set = stop timer/graphing after idle safe temp reached. +42bytes
 
 //#define FAKE_HW             1
 //#define PIDTUNE             1   // autotune wouldn't fit in the 28k available on my arduino pro micro.
@@ -104,8 +104,13 @@ const char *ver = "3.1_tr01";
 #define TCOUPLE2_CS  4
 
 // SSR
-#define PIN_HEATER   0 // SSR output for the heater
-#define PIN_FAN      1 // SSR output for the fan
+#ifdef __AVR_ATmega32U4__
+ #define PIN_HEATER   0
+ #define PIN_FAN      1
+#else
+ #define PIN_HEATER   1  // SSR output for the heater
+ #define PIN_FAN      0  // SSR output for the fan
+#endif
 
 // ZX Circuit
 #define PIN_ZX       2 // pin for zero crossing detector
