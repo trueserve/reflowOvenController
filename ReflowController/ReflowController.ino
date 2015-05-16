@@ -8,6 +8,7 @@
 // --CONFIGURATION-------------------------------------------------------------
 #define BOARD_TYPE          1   // 0 = kp's design, 1 = true's design
 #define LINE_FREQ           60  // 50 or 60 supported
+#define FAN_MODE            1   // 0 = phase control, 1 = on/off control (does not support PC)
 
 #define ENC_STEPS_PER_NOTCH 4   // steps per notch of the rotary encoder. to cal: set to 1, turn knob slowly, count
 
@@ -21,6 +22,9 @@
 #define GRAPH_DRAW_LINES    1   // unset = draw with pixels (sometimes has gaps), set = draw with lines (no gaps, nicer). +102bytes
 #define GRAPH_HAS_TEMPS     1   // unset = nothing, set = print temperature values on right edge of graph line. +74bytes
 #define GRAPH_STOP_ON_DONE  1   // unset = keep looping graph after done, set = stop timer/graphing after idle safe temp reached. +42bytes
+
+//#define INVERT_HEATER       1   // invert heater pin
+#define INVERT_FAN          1   // invert fan pin
 
 //#define FAKE_HW             1
 //#define PIDTUNE             1   // autotune wouldn't fit in the 28k available on my arduino pro micro.
@@ -59,14 +63,14 @@
 
 
 // --VER-----------------------------------------------------------------------
-const char *ver = "3.1_tr01";
+const char *ver = "3.1_tr02";
 
 
 // --FREQ----------------------------------------------------------------------
-#define TIMER1_ISR_CYCLE      600     // ms per timer1 tick. DEFAULT_LOOP_DELAY depends on this. fyi, TimerOne runs in mode 8.
+#define TIMER1_ISR_CYCLE      600     // usec per timer1 tick. DEFAULT_LOOP_DELAY depends on this. fyi, TimerOne runs in mode 8.
                                       // at 600, we are divisible by 100 or 120, and get a counter value of 4800, prescale 1.
 
-#define MS_PER_SINE           (double)(5000 / LINE_FREQ)     // 50Hz mains is 100ms per sinusoid; 60Hz is 83.333
+#define MS_PER_SINE           (double)(5000 / LINE_FREQ)     // 50Hz mains is 10ms per sinusoid; 60Hz is 8.333
 
 #define DEFAULT_LOOP_DELAY    (uint16_t)(((F_CPU / 2000000) * TIMER1_ISR_CYCLE) / (LINE_FREQ * 2))     // 50Hz = 48, 60Hz = 40
 
@@ -137,6 +141,7 @@ const char *ver = "3.1_tr01";
 // --GLOBALS-------------------------------------------------------------------
 volatile uint32_t timerTicks     = 0;
 volatile uint32_t zeroCrossTicks = 0;
+volatile uint8_t  fanTicks       = 0;
 volatile uint8_t  phaseCounter   = 0;
 
 uint32_t lastUpdate              = 0;
@@ -694,6 +699,11 @@ void zeroCrossingIsr(void)
   
   zeroCrossTicks++;
 
+  if (--fanTicks == 0) {
+    fanTicks = 25;
+  }
+  
+
   // calculate wave packet parameters
   Channels[ch].state += Channels[ch].target;
   if (Channels[ch].state >= 100) {
@@ -727,14 +737,23 @@ ISR(TIMER2_COMPA_vect) {
 void timerIsr(void)
 {
   static uint32_t lastTicks = 0;
-
+  
+#if (FAN_MODE == 0)
   // phase control for the fan 
-  if (++phaseCounter > 90) {
+  phaseCounter += (TIMER1_ISR_CYCLE / (LINE_FREQ * 2));
+  if (phaseCounter > 90) {
     phaseCounter = 0;
   }
-
-  digitalWrite(PIN_FAN, (phaseCounter > Channels[CHANNEL_FAN].target) ? LOW : HIGH);
-
+  
+  bool fanSet = (phaseCounter > Channels[CHANNEL_FAN].target) ? LOW : HIGH;
+#elif (FAN_MODE == 1)
+  bool fanSet = ((fanValue >> 2) > fanTicks) ? LOW : HIGH;
+#else
+  #error ("Please set FAN_MODE to 0 or 1")
+#endif
+  if (INVERT_FAN) fanSet = !fanSet;
+  digitalWrite(PIN_FAN, fanSet);
+  
   // wave packet control for heater
   if (Channels[CHANNEL_HEATER].next > lastTicks // FIXME: this loses ticks when overflowing
           && timerTicks > Channels[CHANNEL_HEATER].next
@@ -742,6 +761,8 @@ void timerIsr(void)
   {
     digitalWrite(PIN_HEATER, Channels[CHANNEL_HEATER].action ? HIGH : LOW);
     lastTicks = timerTicks;
+  } else {
+    digitalWrite(PIN_HEATER, LOW);
   }
   
   // handle encoder + button
@@ -1397,8 +1418,9 @@ void loop(void)
       }
       else if (Engine.lastInvokedItem == &Menu::NullItem) {
         // we are at root menu; show the currently loaded profile
-        printAtPos(FS("Using Profile "), TFT_LEFTCOL, 80);
+        printAtPos(FS("Using Profile "), TFT_LEFTCOL, 80);       
         tft.print(activeProfileId);
+
       }
     }
   }
@@ -1621,8 +1643,8 @@ void loop(void)
 
   Channels[CHANNEL_HEATER].target = heaterValue;
 
-  double fanTmp = 90.0 / 100.0 * fanValue; // 0-100% -> 0-90° phase control
-  Channels[CHANNEL_FAN].target = 90 - (uint8_t)fanTmp;
+  // 0-100% -> 0-90° phase control
+  Channels[CHANNEL_FAN].target = 90 - ((90 * fanValue) / 100);
 }
 
 void memoryFeedbackScreen(uint8_t profileId, bool loading)
