@@ -8,7 +8,6 @@
 // --CONFIGURATION-------------------------------------------------------------
 #define BOARD_TYPE          1   // 0 = kp's design, 1 = true's design
 #define LINE_FREQ           60  // 50 or 60 supported
-#define FAN_MODE            1   // 0 = phase control, 1 = on/off control (does not support PC)
 
 #define ENC_STEPS_PER_NOTCH 4   // steps per notch of the rotary encoder. to cal: set to 1, turn knob slowly, count
 
@@ -23,7 +22,7 @@
 #define GRAPH_HAS_TEMPS     1   // unset = nothing, set = print temperature values on right edge of graph line. +74bytes
 #define GRAPH_STOP_ON_DONE  1   // unset = keep looping graph after done, set = stop timer/graphing after idle safe temp reached. +42bytes
 
-//#define INVERT_HEATER       1   // invert heater pin
+#define INVERT_HEATER       1   // invert heater pin
 #define INVERT_FAN          1   // invert fan pin
 
 //#define FAKE_HW             1
@@ -72,7 +71,7 @@ const char *ver = "3.1_tr02";
 
 #define MS_PER_SINE           (double)(5000 / LINE_FREQ)     // 50Hz mains is 10ms per sinusoid; 60Hz is 8.333
 
-#define DEFAULT_LOOP_DELAY    (uint16_t)(((F_CPU / 2000000) * TIMER1_ISR_CYCLE) / (LINE_FREQ * 2))     // 50Hz = 48, 60Hz = 40
+#define DEFAULT_LOOP_DELAY    (uint16_t)((MS_PER_SINE * 100) / TIMER1_ISR_CYCLE) / 2     // 50Hz = 16.6, 60Hz = 13.3
 
 
 // --CLICK ENCODER-------------------------------------------------------------
@@ -148,7 +147,7 @@ uint32_t lastUpdate              = 0;
 uint32_t lastDisplayUpdate       = 0;
 
 #ifdef GRAPH_STOP_ON_DONE
-  static bool processCompleted = false;
+  bool processCompleted = false;
 #endif
 
 char buf[20]; // generic char buffer
@@ -156,7 +155,7 @@ char buf[20]; // generic char buffer
 
 // --PID-----------------------------------------------------------------------
 uint8_t fanValue;
-uint8_t heaterValue = 0;
+uint8_t heaterValue;
 
 double Setpoint;
 double Input;
@@ -630,10 +629,14 @@ uint8_t tcIndex = 0;                // the index of the current reading
 // Ensure that relay outputs are off (low) when starting
 void setupRelayPins(void)
 {
+#else
   digitalWrite(PIN_HEATER, LOW);
+#endif
   pinMode(PIN_HEATER, OUTPUT);
   
+#else
   digitalWrite(PIN_FAN, LOW);
+#endif
   pinMode(PIN_FAN, OUTPUT);
 }
 
@@ -698,11 +701,9 @@ void zeroCrossingIsr(void)
   TCNT1 = 0;
   
   zeroCrossTicks++;
-
   if (--fanTicks == 0) {
     fanTicks = 25;
-  }
-  
+  }  
 
   // calculate wave packet parameters
   Channels[ch].state += Channels[ch].target;
@@ -713,7 +714,7 @@ void zeroCrossingIsr(void)
   else {
     Channels[ch].action = true;
   }
-  Channels[ch].next = timerTicks + zxLoopDelay; // delay added to reach the next zx
+  Channels[ch].next = (timerTicks + zxLoopDelay) - 1; // delay added to reach the next zx
 
   ++ch %= CHANNELS; // next channel
 
@@ -736,7 +737,7 @@ ISR(TIMER2_COMPA_vect) {
 // --TIMER ISR-----------------------------------------------------------------
 void timerIsr(void)
 {
-  static uint32_t lastTicks = 0;
+  static uint32_t lastHtrTicks = 0;
   
 #if (FAN_MODE == 0)
   // phase control for the fan 
@@ -747,28 +748,52 @@ void timerIsr(void)
   
   bool fanSet = (phaseCounter > Channels[CHANNEL_FAN].target) ? LOW : HIGH;
 #elif (FAN_MODE == 1)
+  // toggling control for the fan, useful for picky fans and low code space
   bool fanSet = ((fanValue >> 2) > fanTicks) ? LOW : HIGH;
+#elif (FAN_MODE == 2)
+  // wave packet control for the fan, implemented because it works on my fan and phase control doesn't
+  static uint32_t lastFanTicks = 0;
+  static bool fanSet;
+  
+  if (Channels[CHANNEL_FAN].next > lastFanTicks // FIXME: this loses ticks when overflowing
+          && timerTicks > Channels[CHANNEL_FAN].next)
+  {
+    fanSet = Channels[CHANNEL_FAN].action ? HIGH : LOW;
+    lastFanTicks = timerTicks;
+  }
 #else
-  #error ("Please set FAN_MODE to 0 or 1")
+  #error ("Please set FAN_MODE to 0, 1 or 2")
 #endif
-  if (INVERT_FAN) fanSet = !fanSet;
+
+#if (INVERT_FAN != 0)
+  digitalWrite(PIN_FAN, !fanSet);
+#else
   digitalWrite(PIN_FAN, fanSet);
+#endif
+  
   
   // wave packet control for heater
-  if (Channels[CHANNEL_HEATER].next > lastTicks // FIXME: this loses ticks when overflowing
-          && timerTicks > Channels[CHANNEL_HEATER].next
-          && Channels[CHANNEL_HEATER].target)
+  if (Channels[CHANNEL_HEATER].next > lastHtrTicks // FIXME: this loses ticks when overflowing
+          && timerTicks > Channels[CHANNEL_HEATER].next)
   {
-    digitalWrite(PIN_HEATER, Channels[CHANNEL_HEATER].action ? HIGH : LOW);
-    lastTicks = timerTicks;
-  } else {
-    digitalWrite(PIN_HEATER, LOW);
+    bool heaterSet = Channels[CHANNEL_HEATER].action ? HIGH : LOW;
+
+#if (INVERT_HEATER != 0)
+    digitalWrite(PIN_HEATER, !heaterSet);
+#else
+    digitalWrite(PIN_HEATER, heaterSet);
+#endif
+
+    lastHtrTicks = timerTicks;
   }
+
   
   // handle encoder + button
   Encoder.service();
 
+  // update timer1 calls
   timerTicks++;
+
 
 #ifdef WITH_CALIBRATION
   if (zxLoopCalibration.iterations < zxCalibrationLoops) {
@@ -1644,7 +1669,9 @@ void loop(void)
   Channels[CHANNEL_HEATER].target = heaterValue;
 
   // 0-100% -> 0-90° phase control
+#if (FAN_MODE == 0)
   Channels[CHANNEL_FAN].target = 90 - ((90 * fanValue) / 100);
+#endif
 }
 
 void memoryFeedbackScreen(uint8_t profileId, bool loading)
